@@ -1,29 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Building2, Menu, X, LogOut } from 'lucide-react';
-import { getCurrentUser, signOut } from '../lib/supabase';
-import { User } from '../types';
+import { signOut } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const { user, initialize } = useAuthStore();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { user, error } = await getCurrentUser();
-      if (user && !error) {
-        setUser({ id: user.id, email: user.email || '' });
-      }
-    };
-    
-    checkUser();
-  }, []);
 
   const handleSignOut = async () => {
     const { error } = await signOut();
     if (!error) {
-      setUser(null);
+      await initialize(); // Re-initialize auth state after signout
       navigate('/');
     }
   };

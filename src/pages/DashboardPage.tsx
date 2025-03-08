@@ -1,25 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getCurrentUser } from '../lib/supabase';
 import { Building, Briefcase, TrendingUp, Clock, FileText, Calendar, PieChart, ArrowUpRight, Download } from 'lucide-react';
-import { User } from '../types';
+import { useAuthStore } from '../lib/store';
 
 const DashboardPage: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, initialized } = useAuthStore();
   const [activeTab, setActiveTab] = useState('overview');
-  
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { user, error } = await getCurrentUser();
-      if (user && !error) {
-        setUser({ id: user.id, email: user.email || '' });
-      }
-      setLoading(false);
-    };
-    
-    fetchUser();
-  }, []);
   
   // Mock data for investments
   const investments = [
@@ -94,7 +80,7 @@ const DashboardPage: React.FC = () => {
     });
   };
   
-  if (loading) {
+  if (!initialized) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
