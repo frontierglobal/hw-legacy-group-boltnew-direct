@@ -29,6 +29,7 @@ import AdminDocumentsPage from './pages/admin/DocumentsPage';
 import AuditLogsPage from './pages/admin/AuditLogsPage';
 import ReportsPage from './pages/admin/ReportsPage';
 import { useAuthStore } from './lib/store';
+import AuthCallback from './pages/AuthCallback';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -99,6 +100,7 @@ function App() {
                         <Route path="/businesses/:id" element={<BusinessDetailPage />} />
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/register" element={<RegisterPage />} />
+                        <Route path="/auth/callback" element={<AuthCallback />} />
                         <Route path="/faq" element={<FAQPage />} />
                         <Route path="/terms" element={<TermsPage />} />
                         <Route path="/privacy" element={<PrivacyPage />} />
