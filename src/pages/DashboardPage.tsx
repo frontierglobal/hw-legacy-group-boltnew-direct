@@ -39,21 +39,42 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch investments
+        // Fetch investments with simplified query
         const { data: investmentsData, error: investmentsError } = await supabase
           .from('investments')
-          .select('*')
+          .select(`
+            id,
+            name,
+            type,
+            amount,
+            start_date,
+            end_date,
+            interest_rate,
+            status
+          `)
           .eq('user_id', user.id);
 
-        if (investmentsError) throw investmentsError;
+        if (investmentsError) {
+          console.error('Error fetching investments:', investmentsError);
+          throw new Error('Failed to fetch investments');
+        }
 
-        // Fetch documents
+        // Fetch documents with simplified query
         const { data: documentsData, error: documentsError } = await supabase
           .from('documents')
-          .select('*')
+          .select(`
+            id,
+            name,
+            created_at,
+            status,
+            url
+          `)
           .eq('user_id', user.id);
 
-        if (documentsError) throw documentsError;
+        if (documentsError) {
+          console.error('Error fetching documents:', documentsError);
+          throw new Error('Failed to fetch documents');
+        }
 
         setInvestments(investmentsData || []);
         setDocuments(documentsData || []);
@@ -65,8 +86,10 @@ const DashboardPage: React.FC = () => {
       }
     };
 
-    fetchData();
-  }, [user]);
+    if (initialized) {
+      fetchData();
+    }
+  }, [user, initialized]);
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GB', {
