@@ -1,7 +1,8 @@
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User, AuthError } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from './supabase';
+import { logger } from './logger';
 
 export interface AuthState {
   user: User | null;
@@ -40,55 +41,57 @@ const createAuthStore = (
   setInitialized: (initialized: boolean) => set({ initialized }),
   initialize: async () => {
     try {
-      console.log('Starting auth store initialization...');
+      logger.info('Starting auth store initialization...');
       
       // Prevent multiple simultaneous initializations
       const state = get();
       if (state.initializationPromise) {
-        console.log('Initialization already in progress, waiting...');
+        logger.debug('Initialization already in progress, waiting...');
         await state.initializationPromise;
         return;
       }
 
       // If already initialized and has valid session, skip
       if (state.initialized && state.session?.access_token && state.user) {
-        console.log('Already initialized with valid session, skipping...');
+        logger.debug('Already initialized with valid session, skipping...');
         return;
       }
 
       const initPromise = (async () => {
         try {
-          console.log('Setting initialized to false...');
+          logger.debug('Setting initialized to false...');
           set({ initialized: false });
 
           // Get initial session
-          console.log('Getting initial session...');
+          logger.debug('Getting initial session...');
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError) {
-            console.error('Session error:', sessionError);
+            const error = sessionError instanceof AuthError ? sessionError : new Error('Unknown session error');
+            logger.error('Session error:', error);
             set({ user: null, session: null, isAdmin: false, initialized: true, initializationPromise: null });
             return;
           }
 
           if (!session) {
-            console.log('No session found');
+            logger.info('No session found');
             set({ user: null, session: null, isAdmin: false, initialized: true, initializationPromise: null });
             return;
           }
 
-          console.log('Session found, getting user data...');
+          logger.info('Session found, getting user data...', { userId: session.user.id });
           // Get user data
           const { data: { user }, error: userError } = await supabase.auth.getUser();
           
           if (userError || !user) {
-            console.error('User error:', userError);
+            const error = userError instanceof AuthError ? userError : new Error('Unknown user error');
+            logger.error('User error:', error);
             set({ user: null, session: null, isAdmin: false, initialized: true, initializationPromise: null });
             return;
           }
 
           try {
-            console.log('Checking admin status...');
+            logger.debug('Checking admin status...', { userId: user.id });
             // First try the materialized view
             const { data: adminData, error: adminViewError } = await supabase
               .from('admin_users')
@@ -98,7 +101,7 @@ const createAuthStore = (
 
             // If the view doesn't exist, try the direct join approach
             if (adminViewError && adminViewError.message.includes('does not exist')) {
-              console.log('Admin view not found, checking roles directly...');
+              logger.warn('Admin view not found, checking roles directly...', { userId: user.id });
               const { data: roleData, error: roleError } = await supabase
                 .from('user_roles')
                 .select(`
@@ -109,7 +112,7 @@ const createAuthStore = (
                 .eq('user_id', user.id) as { data: RoleData[] | null, error: any };
 
               if (roleError) {
-                console.error('Error checking roles:', roleError);
+                logger.error('Error checking roles:', roleError);
                 // Don't fail initialization on role check error
                 set({ 
                   user, 
@@ -122,7 +125,8 @@ const createAuthStore = (
               }
 
               const isAdmin = roleData?.some(r => r.role?.name === 'admin') ?? false;
-              console.log('Setting final state from roles...', {
+              logger.info('Setting final state from roles...', {
+                userId: user.id,
                 hasUser: !!user,
                 hasSession: !!session,
                 isAdmin
@@ -139,7 +143,7 @@ const createAuthStore = (
             }
 
             if (adminViewError) {
-              console.error('Error checking admin status:', adminViewError);
+              logger.error('Error checking admin status:', adminViewError);
               // Don't fail initialization on admin check error
               set({ 
                 user, 
@@ -151,7 +155,8 @@ const createAuthStore = (
               return;
             }
 
-            console.log('Setting final state...', {
+            logger.info('Setting final state...', {
+              userId: user.id,
               hasUser: !!user,
               hasSession: !!session,
               isAdmin: !!adminData
@@ -165,7 +170,7 @@ const createAuthStore = (
               initializationPromise: null
             });
           } catch (error) {
-            console.error('Error checking admin status:', error);
+            logger.error('Error checking admin status:', error as Error);
             // Don't fail initialization on admin check error
             set({ 
               user, 
@@ -176,7 +181,7 @@ const createAuthStore = (
             });
           }
         } catch (error) {
-          console.error('Error during initialization:', error);
+          logger.error('Error during initialization:', error as Error);
           set({ 
             user: null, 
             session: null,
@@ -187,12 +192,12 @@ const createAuthStore = (
         }
       })();
 
-      console.log('Setting initialization promise...');
+      logger.debug('Setting initialization promise...');
       set({ initializationPromise: initPromise });
       await initPromise;
-      console.log('Initialization complete');
+      logger.info('Initialization complete');
     } catch (error) {
-      console.error('Error in initialize function:', error);
+      logger.error('Error in initialize function:', error as Error);
       set({ 
         user: null, 
         session: null,

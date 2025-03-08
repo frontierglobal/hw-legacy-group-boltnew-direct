@@ -1,194 +1,109 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from './logger';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const isProd = import.meta.env.PROD;
-const productionUrl = import.meta.env.VITE_PRODUCTION_URL || 'https://hw-legacy-group-boltnew-direct-6sngrc6ty.vercel.app';
-
-console.log('Initializing Supabase with:', {
-  hasUrl: !!supabaseUrl,
-  hasAnonKey: !!supabaseAnonKey,
-  isProd,
-  productionUrl
-});
+// Check if required environment variables are present
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase credentials. Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your .env file.'
+  logger.error(
+    'Missing Supabase credentials',
+    new Error('Missing Supabase credentials. Please check your environment variables.'),
+    { context: { hasUrl: !!supabaseUrl, hasAnonKey: !!supabaseAnonKey } }
   );
+  throw new Error('Missing Supabase credentials. Please check your environment variables.');
 }
 
-// Check if we're in a secure context and storage is available
-const getStorage = () => {
+// Check if localStorage is available
+const isLocalStorageAvailable = () => {
   try {
-    // Check if we're in a secure context
-    if (!window.isSecureContext) {
-      console.warn('Not in a secure context, falling back to memory storage');
-      return undefined;
-    }
-    
-    // Test storage access
-    const test = '__storage_test__';
-    localStorage.setItem(test, test);
-    localStorage.removeItem(test);
-    return localStorage;
+    const testKey = '__supabase_test__';
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
   } catch (e) {
-    console.warn('Storage access error:', e);
-    return undefined;
+    logger.warn('localStorage is not available:', e as Error);
+    return false;
   }
 };
 
-const storage = getStorage();
-
-console.log('Creating Supabase client with config:', {
-  persistSession: !!storage,
-  storageKey: 'hw-legacy-auth',
-  hasStorage: !!storage,
-  autoRefreshToken: true,
-  detectSessionInUrl: true,
-  flowType: 'pkce'
-});
+// Initialize Supabase client
+logger.info('Initializing Supabase client...', { url: supabaseUrl });
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: !!storage,
-    storageKey: 'hw-legacy-auth',
-    storage: storage,
+    persistSession: isLocalStorageAvailable(),
     autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-    debug: true // Enable debug mode for auth
-  }
-});
-
-// Log initial session state
-supabase.auth.getSession().then(({ data: { session }, error }) => {
-  if (error) {
-    console.error('Error getting initial session:', error);
-  } else {
-    console.log('Initial session state:', {
-      hasSession: !!session,
-      user: session?.user?.email
-    });
+    detectSessionInUrl: true
   }
 });
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Auth state changed:', event, {
-    hasSession: !!session,
-    user: session?.user?.email
-  });
+  logger.info('Auth state changed:', { event, hasSession: !!session });
 });
 
-// Auth helpers
-export const signUp = async (email: string, password: string) => {
-  try {
-    const redirectTo = isProd 
-      ? `${productionUrl}/auth/callback`
-      : `${window.location.origin}/auth/callback`;
-
-    console.log('Attempting signup with redirectTo:', redirectTo);
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: {
-          email: email,
-          email_verified: false,
-          phone_verified: false
-        }
-      }
-    });
-
-    if (error) {
-      console.error('Signup error:', error);
-      throw error;
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Signup process error:', error);
-    return {
-      data: null,
-      error: error instanceof Error ? error : new Error('An unknown error occurred during signup')
-    };
-  }
-};
-
+// Helper functions with logging
 export const signIn = async (email: string, password: string) => {
+  logger.debug('Attempting sign in...', { email });
   try {
-    console.log('Starting sign-in process...');
-
-    // Don't clear existing session as it may cause storage access issues
-    console.log('Attempting to sign in...');
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      console.error('Sign in error:', error);
-      throw error;
+      logger.error('Sign in error:', error);
+    } else {
+      logger.info('Sign in successful', { userId: data.user?.id });
     }
-
-    console.log('Sign in response:', { 
-      hasSession: !!data.session,
-      hasUser: !!data.user,
-      email: data.user?.email
-    });
-
-    if (!data.session) {
-      console.error('No session in sign-in response');
-      throw new Error('No session returned after successful sign in');
-    }
-
-    return { data, error: null };
+    return { data, error };
   } catch (error) {
-    console.error('Sign in process error:', error);
-    return {
-      data: null,
-      error: error instanceof Error ? error : new Error('An unknown error occurred during sign in')
-    };
+    logger.error('Unexpected error during sign in:', error as Error);
+    throw error;
   }
 };
 
 export const signOut = async () => {
+  logger.debug('Attempting sign out...');
   try {
-    console.log('Starting sign out process...');
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    
-    // Safely clear local storage
-    if (storage) {
-      localStorage.removeItem('hw-legacy-auth');
-      console.log('Local storage cleared');
+    if (error) {
+      logger.error('Sign out error:', error);
+    } else {
+      logger.info('Sign out successful');
     }
-
-    console.log('Sign out successful');
-    return { error: null };
+    return { error };
   } catch (error) {
-    console.error('Sign out error:', error);
-    return {
-      error: error instanceof Error ? error : new Error('An unknown error occurred during sign out')
-    };
+    logger.error('Unexpected error during sign out:', error as Error);
+    throw error;
   }
 };
 
 export const getCurrentUser = async () => {
+  logger.debug('Getting current user...');
   try {
-    console.log('Getting current user...');
     const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    console.log('Current user:', user?.email || 'none');
-    return { user, error: null };
+    if (error) {
+      logger.error('Get user error:', error);
+    } else {
+      logger.info('Got current user:', { userId: user?.id });
+    }
+    return { user, error };
   } catch (error) {
-    console.error('Get current user error:', error);
-    return {
-      user: null,
-      error: error instanceof Error ? error : new Error('An unknown error occurred while getting user')
-    };
+    logger.error('Unexpected error getting current user:', error as Error);
+    throw error;
+  }
+};
+
+export const getCurrentSession = async () => {
+  logger.debug('Getting current session...');
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      logger.error('Get session error:', error);
+    } else {
+      logger.info('Got current session:', { hasSession: !!session });
+    }
+    return { session, error };
+  } catch (error) {
+    logger.error('Unexpected error getting current session:', error as Error);
+    throw error;
   }
 };

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { signIn } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { LogIn, AlertCircle } from 'lucide-react';
+import { logger } from '../lib/logger';
 
 interface LoginFormData {
   email: string;
@@ -15,95 +16,55 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { initialize, user, initialized } = useAuthStore();
+  const { user, initialized, initialize } = useAuthStore();
   
   // Redirect if already logged in
   useEffect(() => {
-    console.log('LoginPage mounted, checking user state:', { 
-      hasUser: !!user,
-      initialized
-    });
-
-    const checkAuth = async () => {
-      if (!initialized) {
-        console.log('Auth not initialized, initializing...');
-        await initialize();
-      }
-      
-      if (user) {
-        console.log('User already logged in, redirecting to dashboard');
-        navigate('/dashboard');
-      }
-    };
-
-    checkAuth();
-  }, [user, navigate, initialize, initialized]);
-  
-  const onSubmit = async (data: LoginFormData) => {
-    console.log('Login form submitted');
-    if (loading) {
-      console.log('Already processing login, skipping');
-      return;
+    logger.debug('LoginPage mounted, checking initialization state...');
+    if (!initialized) {
+      logger.info('Auth store not initialized, initializing...');
+      initialize();
+    } else if (user) {
+      logger.info('User already logged in, redirecting to home...', { userId: user.id });
+      navigate('/');
     }
-    
-    setLoading(true);
+  }, [user, initialized, initialize, navigate]);
+  
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setError(null);
-    
+    setLoading(true);
+
     try {
-      console.log('Starting sign in process');
-      const { data: userData, error: signInError } = await signIn(data.email, data.password);
+      logger.debug('Login form submitted, attempting sign in...');
+      const formData = new FormData(e.currentTarget);
+      const email = formData.get('email') as string;
+      const password = formData.get('password') as string;
+
+      if (!email || !password) {
+        logger.warn('Missing email or password');
+        setError('Please enter both email and password');
+        setLoading(false);
+        return;
+      }
+
+      const { error: signInError } = await signIn(email, password);
       
       if (signInError) {
-        console.error('Sign in error:', signInError);
-        throw signInError;
-      }
-      
-      if (!userData?.session) {
-        console.error('No session returned after sign in');
-        throw new Error('No session returned after sign in');
+        logger.error('Sign in error:', signInError);
+        setError(signInError.message);
+        setLoading(false);
+        return;
       }
 
-      console.log('Sign in successful, initializing auth store');
+      logger.info('Sign in successful, initializing auth store...');
       await initialize();
-
-      // Check if initialization was successful
-      const { user: currentUser, initialized: isInitialized } = useAuthStore.getState();
-      
-      console.log('Checking initialization status:', {
-        hasUser: !!currentUser,
-        initialized: isInitialized
-      });
-
-      if (!isInitialized) {
-        throw new Error('Failed to initialize auth store');
-      }
-
-      if (!currentUser) {
-        throw new Error('Failed to initialize user session');
-      }
-
-      console.log('Auth store initialized, redirecting to dashboard');
-      navigate('/dashboard', { replace: true });
-    } catch (err) {
-      console.error('Login error:', err);
-      let errorMessage = 'An error occurred during login. Please try again.';
-      
-      if (err instanceof Error) {
-        // Handle specific error messages
-        if (err.message.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password';
-        } else if (err.message.includes('Email not confirmed')) {
-          errorMessage = 'Please verify your email address before logging in';
-        } else if (err.message.includes('storage') || err.message.includes('localStorage')) {
-          errorMessage = 'Browser storage issue. Please ensure cookies are enabled and try again in a private/incognito window if the issue persists.';
-        } else if (err.message.includes('Failed to initialize')) {
-          errorMessage = 'Failed to initialize session. Please try again.';
-        } else {
-          errorMessage = err.message;
-        }
-      }
-      
-      setError(errorMessage);
+      logger.info('Auth store initialized, redirecting to home...');
+      navigate('/');
+    } catch (error) {
+      logger.error('Unexpected error during sign in:', error as Error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -136,7 +97,7 @@ const LoginPage: React.FC = () => {
             </div>
           )}
           
-          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+          <form className="space-y-6" onSubmit={onSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -210,7 +171,6 @@ const LoginPage: React.FC = () => {
                 type="submit"
                 disabled={loading}
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                onClick={() => console.log('Sign in button clicked')}
               >
                 {loading ? (
                   <div className="flex items-center">
