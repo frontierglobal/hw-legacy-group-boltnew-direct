@@ -41,6 +41,11 @@ const createAuthStore = (
         return;
       }
 
+      // If already initialized and has valid session, skip
+      if (state.initialized && state.session?.access_token && state.user) {
+        return;
+      }
+
       const initPromise = (async () => {
         set({ initialized: false });
 

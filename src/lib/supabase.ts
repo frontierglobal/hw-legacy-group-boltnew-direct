@@ -73,15 +73,35 @@ export const signUp = async (email: string, password: string) => {
 
 export const signIn = async (email: string, password: string) => {
   try {
+    // Clear any existing session first
+    await supabase.auth.signOut();
+
+    // Attempt to sign in
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+
+    if (!data.session) {
+      throw new Error('No session returned after successful sign in');
+    }
+
+    // Verify the session is valid
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !sessionData.session) {
+      console.error('Session verification error:', sessionError);
+      throw sessionError || new Error('Failed to verify session');
+    }
+
     return { data, error: null };
   } catch (error) {
-    console.error('Sign in error:', error);
+    console.error('Sign in process error:', error);
     return {
       data: null,
       error: error instanceof Error ? error : new Error('An unknown error occurred during sign in')

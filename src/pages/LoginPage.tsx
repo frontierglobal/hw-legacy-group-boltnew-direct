@@ -25,6 +25,8 @@ const LoginPage: React.FC = () => {
   }, [user, navigate]);
   
   const onSubmit = async (data: LoginFormData) => {
+    if (loading) return; // Prevent multiple submissions
+    
     setLoading(true);
     setError(null);
     
@@ -32,15 +34,30 @@ const LoginPage: React.FC = () => {
       const { data: userData, error: signInError } = await signIn(data.email, data.password);
       
       if (signInError) {
-        throw new Error(signInError.message);
+        throw signInError;
       }
       
-      if (userData) {
-        await initialize();
-        navigate('/dashboard', { replace: true });
+      if (!userData?.session) {
+        throw new Error('No session returned after sign in');
       }
+
+      // Initialize auth store with new session
+      await initialize();
+
+      // Check if initialization was successful
+      const { user: currentUser } = useAuthStore.getState();
+      if (!currentUser) {
+        throw new Error('Failed to initialize user session');
+      }
+
+      navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during login');
+      console.error('Login error:', err);
+      setError(
+        err instanceof Error 
+          ? err.message 
+          : 'An error occurred during login. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -137,9 +154,9 @@ const LoginPage: React.FC = () => {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+                <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
                   Forgot your password?
-                </a>
+                </Link>
               </div>
             </div>
 
@@ -149,7 +166,14 @@ const LoginPage: React.FC = () => {
                 disabled={loading}
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                    Signing in...
+                  </div>
+                ) : (
+                  'Sign in'
+                )}
               </button>
             </div>
           </form>
