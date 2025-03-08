@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const { initialize } = useAuthStore();
 
   useEffect(() => {
+    let mounted = true;
+
     const handleAuthCallback = async () => {
       try {
         // Get the access token from the URL hash
@@ -39,18 +43,32 @@ export default function AuthCallback() {
           throw new Error('No session found after setting token');
         }
 
-        // If successful, redirect to the dashboard
-        navigate('/dashboard');
+        // Initialize auth store
+        await initialize();
+
+        // Only update state if component is still mounted
+        if (mounted) {
+          // Clear the URL hash to prevent token exposure
+          window.location.hash = '';
+          // Navigate to dashboard
+          navigate('/dashboard', { replace: true });
+        }
       } catch (err) {
         console.error('Error during auth callback:', err);
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-        // On error, redirect to login after a short delay
-        setTimeout(() => navigate('/login'), 3000);
+        if (mounted) {
+          setError(err instanceof Error ? err.message : 'An unknown error occurred');
+          // On error, redirect to login after a short delay
+          setTimeout(() => navigate('/login', { replace: true }), 3000);
+        }
       }
     };
 
     handleAuthCallback();
-  }, [navigate]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate, initialize]);
 
   if (error) {
     return (

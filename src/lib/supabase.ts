@@ -94,8 +94,10 @@ export const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     
-    // Clear local storage
-    localStorage.removeItem('hw-legacy-auth');
+    // Safely clear local storage
+    if (isLocalStorageAvailable()) {
+      localStorage.removeItem('hw-legacy-auth');
+    }
     return { error: null };
   } catch (error) {
     console.error('Sign out error:', error);
