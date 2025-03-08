@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { signIn } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
 import { LogIn, AlertCircle } from 'lucide-react';
 
 interface LoginFormData {
@@ -14,6 +15,7 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const initialize = useAuthStore(state => state.initialize);
   
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
@@ -27,6 +29,7 @@ const LoginPage: React.FC = () => {
       }
       
       if (userData) {
+        await initialize();
         navigate('/dashboard');
       }
     } catch (err) {
@@ -104,11 +107,7 @@ const LoginPage: React.FC = () => {
                     errors.password ? 'border-red-300' : 'border-gray-300'
                   } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
                   {...register('password', { 
-                    required: 'Password is required',
-                    minLength: {
-                      value: 6,
-                      message: 'Password must be at least 6 characters'
-                    }
+                    required: 'Password is required'
                   })}
                 />
                 {errors.password && (

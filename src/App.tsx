@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -30,6 +30,7 @@ import AuditLogsPage from './pages/admin/AuditLogsPage';
 import ReportsPage from './pages/admin/ReportsPage';
 import { useAuthStore } from './lib/store';
 import AuthCallback from './pages/AuthCallback';
+import { supabase } from './lib/supabase';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,7 +42,25 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { user, isAdmin } = useAuthStore();
+  const { user, isAdmin, initialize } = useAuthStore();
+
+  useEffect(() => {
+    // Initialize auth state
+    initialize();
+
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN') {
+        initialize();
+      } else if (event === 'SIGNED_OUT') {
+        initialize();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [initialize]);
 
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     if (!user) {
