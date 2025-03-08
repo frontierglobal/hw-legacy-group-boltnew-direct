@@ -6,8 +6,8 @@ import { supabase } from '../lib/supabase';
 
 interface Investment {
   id: string;
-  title: string;
-  investment_type: string;
+  name: string;
+  type: string;
   amount: number;
   start_date: string;
   end_date: string;
@@ -17,10 +17,10 @@ interface Investment {
 
 interface Document {
   id: string;
-  title: string;
+  name: string;
   created_at: string;
   status: string;
-  file_url: string;
+  url: string;
 }
 
 const DashboardPage: React.FC = () => {
@@ -44,8 +44,8 @@ const DashboardPage: React.FC = () => {
           .from('investments')
           .select(`
             id,
-            title,
-            investment_type,
+            name,
+            type,
             amount,
             start_date,
             end_date,
@@ -64,10 +64,10 @@ const DashboardPage: React.FC = () => {
           .from('documents')
           .select(`
             id,
-            title,
+            name,
             created_at,
             status,
-            file_url
+            url
           `)
           .eq('user_id', user.id);
 
@@ -76,21 +76,8 @@ const DashboardPage: React.FC = () => {
           throw new Error('Failed to fetch documents');
         }
 
-        // Map the data to match our component's expectations
-        const mappedInvestments = (investmentsData || []).map(inv => ({
-          ...inv,
-          type: inv.investment_type,
-          name: inv.title
-        }));
-
-        const mappedDocuments = (documentsData || []).map(doc => ({
-          ...doc,
-          name: doc.title,
-          url: doc.file_url
-        }));
-
-        setInvestments(mappedInvestments);
-        setDocuments(mappedDocuments);
+        setInvestments(investmentsData || []);
+        setDocuments(documentsData || []);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');

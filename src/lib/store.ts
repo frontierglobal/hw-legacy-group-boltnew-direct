@@ -53,10 +53,10 @@ const authStore = (set: any) => ({
       }
 
       try {
-        // Check if user has admin role
+        // Check if user has admin role - using profiles table instead of users
         const { data: adminData, error: adminError } = await supabase
-          .from('users')
-          .select('is_admin')
+          .from('profiles')
+          .select('role')
           .eq('id', user.id)
           .single();
 
@@ -74,7 +74,7 @@ const authStore = (set: any) => ({
         set({ 
           user, 
           session,
-          isAdmin: adminData?.is_admin || false,
+          isAdmin: adminData?.role === 'admin',
           initialized: true 
         });
       } catch (error) {
