@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { signUp } from '../lib/supabase';
-import { UserPlus, AlertCircle, Check } from 'lucide-react';
+import { UserPlus, AlertCircle, Check, Mail } from 'lucide-react';
 
 interface RegisterFormData {
   fullName: string;
@@ -16,7 +16,8 @@ const RegisterPage: React.FC = () => {
   const { register, handleSubmit, watch, formState: { errors } } = useForm<RegisterFormData>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const navigate = useNavigate();
   
   const password = watch('password');
@@ -33,35 +34,48 @@ const RegisterPage: React.FC = () => {
       }
       
       if (userData) {
-        setSuccess(true);
-        // In a real app, you might want to redirect to a verification page
-        // For this demo, we'll just show a success message and redirect to login
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+        setRegisteredEmail(data.email);
+        setRegistrationComplete(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during registration');
+      setRegistrationComplete(false);
     } finally {
       setLoading(false);
     }
   };
   
-  if (success) {
+  if (registrationComplete) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="flex justify-center">
             <div className="bg-green-100 rounded-full p-3">
-              <Check className="h-12 w-12 text-green-600" />
+              <Mail className="h-12 w-12 text-green-600" />
             </div>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Registration Successful!
+            Check your email
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Your account has been created. You will be redirected to the login page shortly.
-          </p>
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600">
+              We've sent a confirmation email to:
+            </p>
+            <p className="mt-2 text-md font-medium text-gray-800">
+              {registeredEmail}
+            </p>
+            <p className="mt-4 text-sm text-gray-600">
+              Click the link in the email to verify your account and complete the registration process.
+            </p>
+          </div>
+          <div className="mt-6 text-center">
+            <Link
+              to="/login"
+              className="text-sm font-medium text-blue-600 hover:text-blue-500"
+            >
+              Return to login
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -178,6 +192,7 @@ const RegisterPage: React.FC = () => {
                 <input
                   id="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
                   className={`appearance-none block w-full px-3 py-2 border ${
                     errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
                   } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
@@ -208,9 +223,9 @@ const RegisterPage: React.FC = () => {
               <div className="ml-3 text-sm">
                 <label htmlFor="agreeTerms" className="font-medium text-gray-700">
                   I agree to the{' '}
-                  <a href="/terms" className="text-blue-600 hover:text-blue-500">
+                  <Link to="/terms" className="text-blue-600 hover:text-blue-500">
                     terms and conditions
-                  </a>
+                  </Link>
                 </label>
                 {errors.agreeTerms && (
                   <p className="mt-2 text-sm text-red-600">{errors.agreeTerms.message}</p>

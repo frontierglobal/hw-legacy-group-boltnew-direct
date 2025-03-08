@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const isProd = import.meta.env.PROD;
+const productionUrl = 'https://hw-legacy-group-boltnew-direct-6sngrc6ty.vercel.app';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -14,18 +16,28 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce'
   }
 });
 
 // Auth helpers
 export const signUp = async (email: string, password: string) => {
   try {
+    const redirectTo = isProd 
+      ? `${productionUrl}/auth/callback`
+      : `${window.location.origin}/auth/callback`;
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`
+        emailRedirectTo: redirectTo,
+        data: {
+          email: email,
+          email_verified: false,
+          phone_verified: false
+        }
       }
     });
 
