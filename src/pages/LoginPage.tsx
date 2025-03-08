@@ -15,16 +15,29 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { initialize, user } = useAuthStore();
+  const { initialize, user, initialized } = useAuthStore();
   
   // Redirect if already logged in
   useEffect(() => {
-    console.log('LoginPage mounted, checking user state:', { hasUser: !!user });
-    if (user) {
-      console.log('User already logged in, redirecting to dashboard');
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
+    console.log('LoginPage mounted, checking user state:', { 
+      hasUser: !!user,
+      initialized
+    });
+
+    const checkAuth = async () => {
+      if (!initialized) {
+        console.log('Auth not initialized, initializing...');
+        await initialize();
+      }
+      
+      if (user) {
+        console.log('User already logged in, redirecting to dashboard');
+        navigate('/dashboard');
+      }
+    };
+
+    checkAuth();
+  }, [user, navigate, initialize, initialized]);
   
   const onSubmit = async (data: LoginFormData) => {
     console.log('Login form submitted');
@@ -54,13 +67,18 @@ const LoginPage: React.FC = () => {
       await initialize();
 
       // Check if initialization was successful
-      const { user: currentUser } = useAuthStore.getState();
+      const { user: currentUser, initialized: isInitialized } = useAuthStore.getState();
       
-      // Add delay to ensure store is updated
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      console.log('Checking initialization status:', {
+        hasUser: !!currentUser,
+        initialized: isInitialized
+      });
+
+      if (!isInitialized) {
+        throw new Error('Failed to initialize auth store');
+      }
+
       if (!currentUser) {
-        console.error('Failed to initialize user session');
         throw new Error('Failed to initialize user session');
       }
 
@@ -76,8 +94,10 @@ const LoginPage: React.FC = () => {
           errorMessage = 'Invalid email or password';
         } else if (err.message.includes('Email not confirmed')) {
           errorMessage = 'Please verify your email address before logging in';
-        } else if (err.message.includes('storage')) {
-          errorMessage = 'Browser storage issue. Please ensure cookies are enabled.';
+        } else if (err.message.includes('storage') || err.message.includes('localStorage')) {
+          errorMessage = 'Browser storage issue. Please ensure cookies are enabled and try again in a private/incognito window if the issue persists.';
+        } else if (err.message.includes('Failed to initialize')) {
+          errorMessage = 'Failed to initialize session. Please try again.';
         } else {
           errorMessage = err.message;
         }
