@@ -1,0 +1,73 @@
+import { Property, Business } from '../types';
+
+export const properties: Property[] = [
+  {
+    id: '1',
+    title: 'Luxury Serviced Apartments',
+    description: 'A block of 12 luxury serviced apartments in Newcastle city center, perfect for business travelers and tourists. High rental yield potential with growing demand in the area.',
+    location: 'Newcastle upon Tyne',
+    price: 1500000,
+    roi: 12,
+    imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    type: 'residential',
+    status: 'available',
+  },
+  {
+    id: '2',
+    title: 'Commercial Office Building',
+    description: 'Prime commercial office space in Sunderland business district. Fully tenanted with long-term leases in place. Excellent opportunity for stable income.',
+    location: 'Sunderland',
+    price: 2300000,
+    roi: 10,
+    imageUrl: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    type: 'commercial',
+    status: 'coming_soon',
+  },
+  {
+    id: '3',
+    title: 'Boutique Hotel Conversion',
+    description: 'Historic building in Durham with planning permission for conversion to a boutique hotel. Excellent location near the cathedral and university.',
+    location: 'Durham',
+    price: 1800000,
+    roi: 14,
+    imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    type: 'commercial',
+    status: 'available',
+  },
+];
+
+export const businesses: Business[] = [
+  {
+    id: '1',
+    name: 'TechNorth Solutions',
+    description: 'Established software development company specializing in fintech solutions. Strong client base and recurring revenue model.',
+    sector: 'Technology',
+    location: 'Newcastle upon Tyne',
+    investmentRequired: 500000,
+    roi: 15,
+    imageUrl: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    status: 'available',
+  },
+  {
+    id: '2',
+    name: 'Green Energy Innovations',
+    description: 'Renewable energy startup with patented technology for efficient solar energy storage. Seeking growth capital for expansion.',
+    sector: 'Energy',
+    location: 'Middlesbrough',
+    investmentRequired: 750000,
+    roi: 18,
+    imageUrl: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    status: 'coming_soon',
+  },
+  {
+    id: '3',
+    name: 'Coastal Brewery',
+    description: 'Award-winning craft brewery with established distribution channels. Looking for investment to expand production capacity.',
+    sector: 'Food & Beverage',
+    location: 'Whitley Bay',
+    investmentRequired: 350000,
+    roi: 12,
+    imageUrl: 'https://images.unsplash.com/photo-1559526324-593bc073d938?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80',
+    status: 'available',
+  },
+];
