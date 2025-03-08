@@ -16,6 +16,12 @@ export interface AuthState {
   initialize: () => Promise<void>;
 }
 
+interface RoleData {
+  role: {
+    name: string;
+  } | null;
+}
+
 const createAuthStore = (
   set: (
     partial: AuthState | Partial<AuthState> | ((state: AuthState) => AuthState | Partial<AuthState>),
@@ -83,15 +89,57 @@ const createAuthStore = (
 
           try {
             console.log('Checking admin status...');
-            // Check if user is admin using the materialized view
-            const { data: adminData, error: adminError } = await supabase
+            // First try the materialized view
+            const { data: adminData, error: adminViewError } = await supabase
               .from('admin_users')
               .select('user_id')
               .eq('user_id', user.id)
               .maybeSingle();
 
-            if (adminError) {
-              console.error('Error checking admin status:', adminError);
+            // If the view doesn't exist, try the direct join approach
+            if (adminViewError && adminViewError.message.includes('does not exist')) {
+              console.log('Admin view not found, checking roles directly...');
+              const { data: roleData, error: roleError } = await supabase
+                .from('user_roles')
+                .select(`
+                  role:roles (
+                    name
+                  )
+                `)
+                .eq('user_id', user.id) as { data: RoleData[] | null, error: any };
+
+              if (roleError) {
+                console.error('Error checking roles:', roleError);
+                // Don't fail initialization on role check error
+                set({ 
+                  user, 
+                  session,
+                  isAdmin: false,
+                  initialized: true,
+                  initializationPromise: null
+                });
+                return;
+              }
+
+              const isAdmin = roleData?.some(r => r.role?.name === 'admin') ?? false;
+              console.log('Setting final state from roles...', {
+                hasUser: !!user,
+                hasSession: !!session,
+                isAdmin
+              });
+
+              set({ 
+                user, 
+                session,
+                isAdmin,
+                initialized: true,
+                initializationPromise: null
+              });
+              return;
+            }
+
+            if (adminViewError) {
+              console.error('Error checking admin status:', adminViewError);
               // Don't fail initialization on admin check error
               set({ 
                 user, 
