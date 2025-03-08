@@ -34,22 +34,28 @@ const createAuthStore = (
   setInitialized: (initialized: boolean) => set({ initialized }),
   initialize: async () => {
     try {
+      console.log('Starting auth store initialization...');
+      
       // Prevent multiple simultaneous initializations
       const state = get();
       if (state.initializationPromise) {
+        console.log('Initialization already in progress, waiting...');
         await state.initializationPromise;
         return;
       }
 
       // If already initialized and has valid session, skip
       if (state.initialized && state.session?.access_token && state.user) {
+        console.log('Already initialized with valid session, skipping...');
         return;
       }
 
       const initPromise = (async () => {
+        console.log('Setting initialized to false...');
         set({ initialized: false });
 
         // Get initial session
+        console.log('Getting initial session...');
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -59,10 +65,12 @@ const createAuthStore = (
         }
 
         if (!session) {
+          console.log('No session found');
           set({ user: null, session: null, isAdmin: false, initialized: true, initializationPromise: null });
           return;
         }
 
+        console.log('Session found, getting user data...');
         // Get user data
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         
@@ -73,6 +81,7 @@ const createAuthStore = (
         }
 
         try {
+          console.log('Checking admin status...');
           // Check if user is admin using the materialized view
           const { data: adminData, error: adminError } = await supabase
             .from('admin_users')
@@ -85,6 +94,12 @@ const createAuthStore = (
             set({ user, session, isAdmin: false, initialized: true, initializationPromise: null });
             return;
           }
+
+          console.log('Setting final state...', {
+            hasUser: !!user,
+            hasSession: !!session,
+            isAdmin: !!adminData
+          });
 
           set({ 
             user, 
@@ -105,8 +120,10 @@ const createAuthStore = (
         }
       })();
 
+      console.log('Setting initialization promise...');
       set({ initializationPromise: initPromise });
       await initPromise;
+      console.log('Initialization complete');
     } catch (error) {
       console.error('Error initializing auth store:', error);
       set({ 

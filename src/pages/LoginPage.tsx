@@ -19,37 +19,49 @@ const LoginPage: React.FC = () => {
   
   // Redirect if already logged in
   useEffect(() => {
+    console.log('LoginPage mounted, checking user state:', { hasUser: !!user });
     if (user) {
+      console.log('User already logged in, redirecting to dashboard');
       navigate('/dashboard');
     }
   }, [user, navigate]);
   
   const onSubmit = async (data: LoginFormData) => {
-    if (loading) return; // Prevent multiple submissions
+    console.log('Login form submitted');
+    if (loading) {
+      console.log('Already processing login, skipping');
+      return;
+    }
     
     setLoading(true);
     setError(null);
     
     try {
+      console.log('Starting sign in process');
       const { data: userData, error: signInError } = await signIn(data.email, data.password);
       
       if (signInError) {
+        console.error('Sign in error:', signInError);
         throw signInError;
       }
       
       if (!userData?.session) {
+        console.error('No session returned after sign in');
         throw new Error('No session returned after sign in');
       }
 
+      console.log('Sign in successful, initializing auth store');
       // Initialize auth store with new session
       await initialize();
 
       // Check if initialization was successful
       const { user: currentUser } = useAuthStore.getState();
       if (!currentUser) {
+        console.error('Failed to initialize user session');
         throw new Error('Failed to initialize user session');
       }
 
+      console.log('Auth store initialized, redirecting to dashboard');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
@@ -58,7 +70,7 @@ const LoginPage: React.FC = () => {
           ? err.message 
           : 'An error occurred during login. Please try again.'
       );
-    } finally {
+      // Reset loading state on error
       setLoading(false);
     }
   };
@@ -165,6 +177,7 @@ const LoginPage: React.FC = () => {
                 type="submit"
                 disabled={loading}
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                onClick={() => console.log('Sign in button clicked')}
               >
                 {loading ? (
                   <div className="flex items-center">
