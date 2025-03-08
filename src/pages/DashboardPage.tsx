@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 
 interface Investment {
   id: string;
-  name: string;
-  type: string;
+  user_id: string;
   amount: number;
+  type: string;
+  target_id: string;
   start_date: string;
   end_date: string;
   interest_rate: number;
@@ -20,7 +21,7 @@ interface Document {
   name: string;
   created_at: string;
   status: string;
-  url: string;
+  file_url: string;
 }
 
 const DashboardPage: React.FC = () => {
@@ -44,9 +45,10 @@ const DashboardPage: React.FC = () => {
           .from('investments')
           .select(`
             id,
-            name,
-            type,
+            user_id,
             amount,
+            type,
+            target_id,
             start_date,
             end_date,
             interest_rate,
@@ -67,7 +69,7 @@ const DashboardPage: React.FC = () => {
             name,
             created_at,
             status,
-            url
+            file_url
           `)
           .eq('user_id', user.id);
 
