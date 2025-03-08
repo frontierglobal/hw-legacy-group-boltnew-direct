@@ -1,67 +1,72 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Building, Briefcase, TrendingUp, Clock, FileText, Calendar, PieChart, ArrowUpRight, Download } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
+import { supabase } from '../lib/supabase';
+
+interface Investment {
+  id: string;
+  name: string;
+  type: 'property' | 'business';
+  amount: number;
+  start_date: string;
+  end_date: string;
+  interest_rate: number;
+  status: string;
+}
+
+interface Document {
+  id: string;
+  name: string;
+  created_at: string;
+  status: string;
+  url?: string;
+}
 
 const DashboardPage: React.FC = () => {
   const { user, initialized } = useAuthStore();
   const [activeTab, setActiveTab] = useState('overview');
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // Mock data for investments
-  const investments = [
-    {
-      id: '1',
-      name: 'Luxury Serviced Apartments',
-      type: 'property',
-      amount: 50000,
-      startDate: '2025-01-15',
-      endDate: '2026-01-15',
-      interestRate: 12,
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'TechNorth Solutions',
-      type: 'business',
-      amount: 25000,
-      startDate: '2024-11-01',
-      endDate: '2025-11-01',
-      interestRate: 15,
-      status: 'active'
-    }
-  ];
-  
-  // Mock data for documents
-  const documents = [
-    {
-      id: '1',
-      name: 'Investment Agreement - Luxury Apartments',
-      dateCreated: '2025-01-10',
-      status: 'completed'
-    },
-    {
-      id: '2',
-      name: 'Investment Agreement - TechNorth',
-      dateCreated: '2024-10-25',
-      status: 'completed'
-    },
-    {
-      id: '3',
-      name: 'KYC Verification',
-      dateCreated: '2024-10-20',
-      status: 'completed'
-    },
-    {
-      id: '4',
-      name: 'Tax Declaration Form',
-      dateCreated: '2025-01-05',
-      status: 'pending'
-    }
-  ];
-  
-  // Calculate total invested and projected returns
-  const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
-  const projectedReturns = investments.reduce((sum, inv) => sum + (inv.amount * inv.interestRate / 100), 0);
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch investments
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from('investments')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (investmentsError) throw investmentsError;
+
+        // Fetch documents
+        const { data: documentsData, error: documentsError } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (documentsError) throw documentsError;
+
+        setInvestments(investmentsData || []);
+        setDocuments(documentsData || []);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Failed to load dashboard data. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GB', {
@@ -79,6 +84,10 @@ const DashboardPage: React.FC = () => {
       year: 'numeric'
     });
   };
+  
+  // Calculate total invested and projected returns
+  const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
+  const projectedReturns = investments.reduce((sum, inv) => sum + (inv.amount * inv.interest_rate / 100), 0);
   
   if (!initialized) {
     return (
@@ -102,6 +111,32 @@ const DashboardPage: React.FC = () => {
         >
           Log In
         </Link>
+      </div>
+    );
+  }
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your investments...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Error</h1>
+        <p className="text-gray-600 mb-6">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -377,13 +412,13 @@ const DashboardPage: React.FC = () => {
                           <div className="text-sm text-gray-900">{formatCurrency(investment.amount)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-green-600">{investment.interestRate}%</div>
+                          <div className="text-sm text-green-600">{investment.interest_rate}%</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{formatDate(investment.startDate)}</div>
+                          <div className="text-sm text-gray-500">{formatDate(investment.start_date)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{formatDate(investment.endDate)}</div>
+                          <div className="text-sm text-gray-500">{formatDate(investment.end_date)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
@@ -435,7 +470,7 @@ const DashboardPage: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{formatDate(document.dateCreated)}</div>
+                          <div className="text-sm text-gray-500">{formatDate(document.created_at)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {document.status === 'completed' ? (

@@ -26,24 +26,33 @@ const authStore = (set: any) => ({
   setInitialized: (initialized: boolean) => set({ initialized }),
   initialize: async () => {
     try {
+      // Set initialized to false while we check
+      set({ initialized: false });
+
       // Get initial session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
-        throw sessionError;
+        console.error('Session error:', sessionError);
+        set({ user: null, session: null, isAdmin: false, initialized: true });
+        return;
       }
 
-      if (session) {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError) {
-          throw userError;
-        }
+      if (!session) {
+        set({ user: null, session: null, isAdmin: false, initialized: true });
+        return;
+      }
 
-        if (!user) {
-          throw new Error('User not found');
-        }
+      // Get user data
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('User error:', userError);
+        set({ user: null, session: null, isAdmin: false, initialized: true });
+        return;
+      }
 
+      try {
         // Check if user is admin
         const { data: adminData, error: adminError } = await supabase
           .from('user_roles')
@@ -62,18 +71,18 @@ const authStore = (set: any) => ({
           isAdmin: !!adminData,
           initialized: true 
         });
-      } else {
-        // No session found, clear the state
+      } catch (error) {
+        // If admin check fails, still set the user but not as admin
+        console.error('Admin check error:', error);
         set({ 
-          user: null, 
-          session: null,
+          user, 
+          session,
           isAdmin: false,
           initialized: true 
         });
       }
     } catch (error) {
       console.error('Error initializing auth store:', error);
-      // On error, clear the state
       set({ 
         user: null, 
         session: null,
@@ -94,7 +103,15 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         session: state.session,
         isAdmin: state.isAdmin
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        // When storage is rehydrated, initialize if we have a session
+        if (state?.session) {
+          state.initialize();
+        } else {
+          state?.setInitialized(true);
+        }
+      }
     }
   )
 );
