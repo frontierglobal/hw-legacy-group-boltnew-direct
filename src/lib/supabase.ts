@@ -2,16 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from './logger';
 
 // Check if required environment variables are present
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   logger.error(
     'Missing Supabase credentials',
-    new Error('Missing Supabase credentials. Please check your environment variables.'),
+    new Error('Missing Supabase credentials. Please check your environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY'),
     { context: { hasUrl: !!supabaseUrl, hasAnonKey: !!supabaseAnonKey } }
   );
-  throw new Error('Missing Supabase credentials. Please check your environment variables.');
+  throw new Error('Missing Supabase credentials. Please check your environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
 }
 
 // Check if localStorage is available
