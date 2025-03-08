@@ -51,7 +51,9 @@ function App() {
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.email);
-      await initialize();
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        await initialize();
+      }
     });
 
     return () => {
@@ -69,7 +71,7 @@ function App() {
     }
 
     if (!user) {
-      return <Navigate to="/login" />;
+      return <Navigate to="/login" replace />;
     }
 
     return <>{children}</>;
@@ -85,7 +87,7 @@ function App() {
     }
 
     if (!user || !isAdmin) {
-      return <Navigate to="/" />;
+      return <Navigate to="/" replace />;
     }
 
     return <>{children}</>;

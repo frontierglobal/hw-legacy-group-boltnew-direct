@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { signIn } from '../lib/supabase';
@@ -15,7 +15,14 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const initialize = useAuthStore(state => state.initialize);
+  const { initialize, user } = useAuthStore();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
   
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
@@ -30,7 +37,7 @@ const LoginPage: React.FC = () => {
       
       if (userData) {
         await initialize();
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during login');
