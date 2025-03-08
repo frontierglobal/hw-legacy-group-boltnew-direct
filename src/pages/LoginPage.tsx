@@ -51,11 +51,14 @@ const LoginPage: React.FC = () => {
       }
 
       console.log('Sign in successful, initializing auth store');
-      // Initialize auth store with new session
       await initialize();
 
       // Check if initialization was successful
       const { user: currentUser } = useAuthStore.getState();
+      
+      // Add delay to ensure store is updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       if (!currentUser) {
         console.error('Failed to initialize user session');
         throw new Error('Failed to initialize user session');
@@ -65,12 +68,22 @@ const LoginPage: React.FC = () => {
       navigate('/dashboard', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
-      setError(
-        err instanceof Error 
-          ? err.message 
-          : 'An error occurred during login. Please try again.'
-      );
-      // Reset loading state on error
+      let errorMessage = 'An error occurred during login. Please try again.';
+      
+      if (err instanceof Error) {
+        // Handle specific error messages
+        if (err.message.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password';
+        } else if (err.message.includes('Email not confirmed')) {
+          errorMessage = 'Please verify your email address before logging in';
+        } else if (err.message.includes('storage')) {
+          errorMessage = 'Browser storage issue. Please ensure cookies are enabled.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
       setLoading(false);
     }
   };

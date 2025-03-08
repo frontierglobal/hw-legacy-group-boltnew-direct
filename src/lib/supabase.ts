@@ -18,20 +18,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Check if localStorage is available
-const isLocalStorageAvailable = () => {
+// Check if we're in a secure context and storage is available
+const getStorage = () => {
   try {
+    // Check if we're in a secure context
+    if (!window.isSecureContext) {
+      console.warn('Not in a secure context, falling back to memory storage');
+      return undefined;
+    }
+    
+    // Test storage access
     const test = '__storage_test__';
     localStorage.setItem(test, test);
     localStorage.removeItem(test);
-    return true;
+    return localStorage;
   } catch (e) {
-    console.error('localStorage not available:', e);
-    return false;
+    console.warn('Storage access error:', e);
+    return undefined;
   }
 };
 
-const storage = isLocalStorageAvailable() ? localStorage : undefined;
+const storage = getStorage();
 
 console.log('Creating Supabase client with config:', {
   persistSession: !!storage,
@@ -115,14 +122,7 @@ export const signIn = async (email: string, password: string) => {
   try {
     console.log('Starting sign-in process...');
 
-    // Clear any existing session first
-    console.log('Clearing existing session...');
-    const { error: signOutError } = await supabase.auth.signOut();
-    if (signOutError) {
-      console.error('Error clearing existing session:', signOutError);
-    }
-
-    // Attempt to sign in
+    // Don't clear existing session as it may cause storage access issues
     console.log('Attempting to sign in...');
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -135,8 +135,8 @@ export const signIn = async (email: string, password: string) => {
     }
 
     console.log('Sign in response:', { 
-      session: data.session ? 'present' : 'missing',
-      user: data.user ? 'present' : 'missing',
+      hasSession: !!data.session,
+      hasUser: !!data.user,
       email: data.user?.email
     });
 
@@ -145,21 +145,6 @@ export const signIn = async (email: string, password: string) => {
       throw new Error('No session returned after successful sign in');
     }
 
-    // Verify the session is valid
-    console.log('Verifying session...');
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('Session verification error:', sessionError);
-      throw sessionError;
-    }
-
-    if (!sessionData.session) {
-      console.error('No session found in verification');
-      throw new Error('Failed to verify session');
-    }
-
-    console.log('Sign in successful, session verified');
     return { data, error: null };
   } catch (error) {
     console.error('Sign in process error:', error);
@@ -177,7 +162,7 @@ export const signOut = async () => {
     if (error) throw error;
     
     // Safely clear local storage
-    if (isLocalStorageAvailable()) {
+    if (storage) {
       localStorage.removeItem('hw-legacy-auth');
       console.log('Local storage cleared');
     }
