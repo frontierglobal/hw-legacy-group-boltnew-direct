@@ -14,7 +14,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'hw-legacy-auth',
+    storage: localStorage,
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce'
@@ -63,14 +64,10 @@ export const signIn = async (email: string, password: string) => {
       password,
     });
 
-    if (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return { data, error: null };
   } catch (error) {
-    console.error('Sign in process error:', error);
+    console.error('Sign in error:', error);
     return {
       data: null,
       error: error instanceof Error ? error : new Error('An unknown error occurred during sign in')
@@ -82,6 +79,9 @@ export const signOut = async () => {
   try {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    
+    // Clear local storage
+    localStorage.removeItem('hw-legacy-auth');
     return { error: null };
   } catch (error) {
     console.error('Sign out error:', error);

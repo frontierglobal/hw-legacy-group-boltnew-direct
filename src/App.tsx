@@ -42,7 +42,7 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { user, isAdmin, initialize } = useAuthStore();
+  const { user, isAdmin, initialize, initialized } = useAuthStore();
 
   useEffect(() => {
     // Initialize auth state
@@ -50,11 +50,8 @@ function App() {
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN') {
-        initialize();
-      } else if (event === 'SIGNED_OUT') {
-        initialize();
-      }
+      console.log('Auth state changed:', event, session?.user?.email);
+      await initialize();
     });
 
     return () => {
@@ -63,16 +60,34 @@ function App() {
   }, [initialize]);
 
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    if (!initialized) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
+
     if (!user) {
       return <Navigate to="/login" />;
     }
+
     return <>{children}</>;
   };
 
   const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+    if (!initialized) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
+
     if (!user || !isAdmin) {
       return <Navigate to="/" />;
     }
+
     return <>{children}</>;
   };
 

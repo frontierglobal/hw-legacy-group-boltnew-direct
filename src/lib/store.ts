@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from './supabase';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 
 interface AuthState {
   user: User | null;
   isAdmin: boolean;
-  session: any | null;
+  session: Session | null;
   initialized: boolean;
   setUser: (user: User | null) => void;
-  setSession: (session: any | null) => void;
+  setSession: (session: Session | null) => void;
   setIsAdmin: (isAdmin: boolean) => void;
   setInitialized: (initialized: boolean) => void;
   initialize: () => Promise<void>;
@@ -17,7 +17,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAdmin: false,
       session: null,
@@ -29,18 +29,34 @@ export const useAuthStore = create<AuthState>()(
       initialize: async () => {
         try {
           // Get initial session
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
+          if (sessionError) {
+            throw sessionError;
+          }
+
           if (session) {
-            const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
             
+            if (userError) {
+              throw userError;
+            }
+
+            if (!user) {
+              throw new Error('User not found');
+            }
+
             // Check if user is admin
-            const { data: adminData } = await supabase
+            const { data: adminData, error: adminError } = await supabase
               .from('user_roles')
               .select('roles!inner(*)')
-              .eq('user_id', user?.id)
+              .eq('user_id', user.id)
               .eq('roles.name', 'admin')
               .maybeSingle();
+
+            if (adminError) {
+              console.error('Error checking admin status:', adminError);
+            }
 
             set({ 
               user, 
@@ -49,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
               initialized: true 
             });
           } else {
+            // No session found, clear the state
             set({ 
               user: null, 
               session: null,
@@ -58,6 +75,7 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (error) {
           console.error('Error initializing auth store:', error);
+          // On error, clear the state
           set({ 
             user: null, 
             session: null,
@@ -68,7 +86,8 @@ export const useAuthStore = create<AuthState>()(
       }
     }),
     {
-      name: 'auth-storage',
+      name: 'hw-legacy-auth-store',
+      storage: localStorage,
       partialize: (state) => ({ 
         user: state.user,
         session: state.session,
