@@ -48,7 +48,7 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch investments with property/business details
+        // Fetch investments
         const { data: investmentsData, error: investmentsError } = await supabase
           .from('investments')
           .select(`
@@ -60,9 +60,7 @@ const DashboardPage: React.FC = () => {
             start_date,
             end_date,
             interest_rate,
-            status,
-            properties!left(id, title),
-            businesses!left(id, name)
+            status
           `)
           .eq('user_id', user.id);
 
@@ -70,6 +68,41 @@ const DashboardPage: React.FC = () => {
           console.error('Error fetching investments:', investmentsError);
           throw new Error('Failed to fetch investments');
         }
+
+        // Fetch property and business details separately
+        const propertyIds = investmentsData
+          ?.filter(inv => inv.type === 'property')
+          .map(inv => inv.target_id) || [];
+        
+        const businessIds = investmentsData
+          ?.filter(inv => inv.type === 'business')
+          .map(inv => inv.target_id) || [];
+
+        const [propertyDetails, businessDetails] = await Promise.all([
+          propertyIds.length > 0 
+            ? supabase
+                .from('properties')
+                .select('id, title')
+                .in('id', propertyIds)
+            : { data: [] },
+          businessIds.length > 0
+            ? supabase
+                .from('businesses')
+                .select('id, name')
+                .in('id', businessIds)
+            : { data: [] }
+        ]);
+
+        // Map property and business details to investments
+        const enrichedInvestments = investmentsData?.map(investment => ({
+          ...investment,
+          property: investment.type === 'property' 
+            ? propertyDetails.data?.find(p => p.id === investment.target_id)
+            : undefined,
+          business: investment.type === 'business'
+            ? businessDetails.data?.find(b => b.id === investment.target_id)
+            : undefined
+        })) || [];
 
         // Fetch documents with correct column names
         const { data: documentsData, error: documentsError } = await supabase
@@ -88,7 +121,7 @@ const DashboardPage: React.FC = () => {
           throw new Error('Failed to fetch documents');
         }
 
-        setInvestments(investmentsData || []);
+        setInvestments(enrichedInvestments);
         setDocuments(documentsData || []);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);

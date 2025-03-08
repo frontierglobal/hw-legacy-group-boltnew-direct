@@ -53,39 +53,25 @@ const authStore = (set: any) => ({
       }
 
       try {
-        // Check if user has admin role using user_roles and roles tables
+        // Check if user is admin
         const { data: adminData, error: adminError } = await supabase
           .from('user_roles')
-          .select('roles!inner(name)')
+          .select('role_id')
           .eq('user_id', user.id)
-          .eq('roles.name', 'admin')
           .single();
 
         if (adminError) {
           console.error('Error checking admin status:', adminError);
-          set({ 
-            user, 
-            session,
-            isAdmin: false,
-            initialized: true 
-          });
+          setIsAdmin(false);
           return;
         }
 
-        set({ 
-          user, 
-          session,
-          isAdmin: !!adminData,
-          initialized: true 
-        });
+        setIsAdmin(!!adminData);
+        setInitialized(true);
       } catch (error) {
-        console.error('Admin check error:', error);
-        set({ 
-          user, 
-          session,
-          isAdmin: false,
-          initialized: true 
-        });
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+        setInitialized(true);
       }
     } catch (error) {
       console.error('Error initializing auth store:', error);
