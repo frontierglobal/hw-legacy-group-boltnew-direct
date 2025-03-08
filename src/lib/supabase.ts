@@ -107,3 +107,31 @@ export const getCurrentSession = async () => {
     throw error;
   }
 };
+
+export const signUp = async (email: string, password: string) => {
+  logger.debug('Attempting sign up...', { email });
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          email,
+          email_verified: false,
+          phone_verified: false
+        }
+      }
+    });
+
+    if (error) {
+      logger.error('Sign up error:', error);
+    } else {
+      logger.info('Sign up successful', { userId: data.user?.id });
+    }
+    return { data, error };
+  } catch (error) {
+    logger.error('Unexpected error during sign up:', error as Error);
+    throw error;
+  }
+};
