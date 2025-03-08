@@ -1,10 +1,9 @@
+import { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { supabase } from './supabase';
-import { User, Session } from '@supabase/supabase-js';
-import { StateCreator } from 'zustand';
 
-interface AuthState {
+export interface AuthState {
   user: User | null;
   isAdmin: boolean;
   session: Session | null;
@@ -23,7 +22,7 @@ const createAuthStore = (
     replace?: boolean
   ) => void,
   get: () => AuthState
-) => ({
+): AuthState => ({
   user: null,
   isAdmin: false,
   session: null,
@@ -36,7 +35,7 @@ const createAuthStore = (
   initialize: async () => {
     try {
       // Prevent multiple simultaneous initializations
-      const state = createAuthStore(set, get);
+      const state = get();
       if (state.initializationPromise) {
         await state.initializationPromise;
         return;
@@ -69,12 +68,11 @@ const createAuthStore = (
         }
 
         try {
-          // Check if user has admin role
+          // Check if user is admin using the materialized view
           const { data: adminData, error: adminError } = await supabase
-            .from('user_roles')
-            .select('roles!inner(name)')
+            .from('admin_users')
+            .select('user_id')
             .eq('user_id', user.id)
-            .eq('roles.name', 'admin')
             .maybeSingle();
 
           if (adminError) {
@@ -121,42 +119,12 @@ export const useAuthStore = create<AuthState>()(
   persist(
     createAuthStore,
     {
-      name: 'hw-legacy-auth-store',
-      storage: createJSONStorage(() => {
-        try {
-          const storage = localStorage;
-          return {
-            getItem: (name: string) => {
-              const value = storage.getItem(name);
-              return value ? JSON.parse(value) : null;
-            },
-            setItem: (name: string, value: any) => {
-              storage.setItem(name, JSON.stringify(value));
-            },
-            removeItem: (name: string) => {
-              storage.removeItem(name);
-            },
-          };
-        } catch {
-          return {
-            getItem: () => null,
-            setItem: () => {},
-            removeItem: () => {},
-          };
-        }
-      }),
-      partialize: (state: AuthState) => ({
+      name: 'auth-store',
+      partialize: (state) => ({
         user: state.user,
         session: state.session,
         isAdmin: state.isAdmin
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state?.session) {
-          state.initialize();
-        } else {
-          state?.setInitialized(true);
-        }
-      }
+      })
     }
   )
 );

@@ -1,11 +1,15 @@
 import { supabase } from './supabase';
-import { Property, Business, Investment, Document, Transaction } from '../types';
+import { Property, Business, Investment, Document, Transaction, User, Role } from '../types';
 
 // Define UserStatus type locally since it's not exported from types
 interface UserStatus {
   email_verified: boolean;
   phone_verified: boolean;
   [key: string]: any;
+}
+
+interface RoleData {
+  role: Role;
 }
 
 // Properties
@@ -135,23 +139,40 @@ export const getUserTransactions = async (userId: string) => {
 
 // Admin Functions
 export const isUserAdmin = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('roles!inner(*)')
-    .eq('user_id', userId)
-    .eq('roles.name', 'admin')
-    .maybeSingle();
-  
-  if (error) throw error;
-  return !!data;
+  try {
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return !!data;
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    return false;
+  }
 };
 
 export const getAllUsers = async () => {
   const { data, error } = await supabase
     .from('users')
-    .select('*, user_roles!inner(roles!inner(*))');
+    .select(`
+      *,
+      roles:user_roles(
+        role:roles(
+          name
+        )
+      )
+    `);
+  
   if (error) throw error;
-  return data;
+
+  // Transform the roles data to match the expected format
+  return data.map(user => ({
+    ...user,
+    roles: (user.roles as RoleData[] | null)?.map(r => r.role) || []
+  }));
 };
 
 export const updateUserStatus = async (userId: string, updates: Partial<UserStatus>) => {
