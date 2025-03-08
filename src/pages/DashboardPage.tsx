@@ -8,12 +8,20 @@ interface Investment {
   id: string;
   user_id: string;
   amount: number;
-  type: string;
+  type: 'property' | 'business';
   target_id: string;
   start_date: string;
   end_date: string;
   interest_rate: number;
   status: string;
+  property?: {
+    id: string;
+    title: string;
+  };
+  business?: {
+    id: string;
+    name: string;
+  };
 }
 
 interface Document {
@@ -40,7 +48,7 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch investments with correct column names
+        // Fetch investments with property/business details
         const { data: investmentsData, error: investmentsError } = await supabase
           .from('investments')
           .select(`
@@ -52,7 +60,9 @@ const DashboardPage: React.FC = () => {
             start_date,
             end_date,
             interest_rate,
-            status
+            status,
+            properties!left(id, title),
+            businesses!left(id, name)
           `)
           .eq('user_id', user.id);
 
@@ -419,7 +429,11 @@ const DashboardPage: React.FC = () => {
                     {investments.map((investment) => (
                       <tr key={investment.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{investment.name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {investment.type === 'property' 
+                              ? investment.property?.title 
+                              : investment.business?.name}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
