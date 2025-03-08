@@ -53,11 +53,11 @@ const authStore = (set: any) => ({
       }
 
       try {
-        // Simplified admin check
+        // Check if user has admin role
         const { data: adminData, error: adminError } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
+          .from('users')
+          .select('is_admin')
+          .eq('id', user.id)
           .single();
 
         if (adminError) {
@@ -74,7 +74,7 @@ const authStore = (set: any) => ({
         set({ 
           user, 
           session,
-          isAdmin: adminData?.role === 'admin',
+          isAdmin: adminData?.is_admin || false,
           initialized: true 
         });
       } catch (error) {

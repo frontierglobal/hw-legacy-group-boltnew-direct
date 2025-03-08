@@ -6,8 +6,8 @@ import { supabase } from '../lib/supabase';
 
 interface Investment {
   id: string;
-  name: string;
-  type: 'property' | 'business';
+  title: string;
+  investment_type: string;
   amount: number;
   start_date: string;
   end_date: string;
@@ -17,10 +17,10 @@ interface Investment {
 
 interface Document {
   id: string;
-  name: string;
+  title: string;
   created_at: string;
   status: string;
-  url?: string;
+  file_url: string;
 }
 
 const DashboardPage: React.FC = () => {
@@ -39,13 +39,13 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch investments with simplified query
+        // Fetch investments with correct column names
         const { data: investmentsData, error: investmentsError } = await supabase
           .from('investments')
           .select(`
             id,
-            name,
-            type,
+            title,
+            investment_type,
             amount,
             start_date,
             end_date,
@@ -59,15 +59,15 @@ const DashboardPage: React.FC = () => {
           throw new Error('Failed to fetch investments');
         }
 
-        // Fetch documents with simplified query
+        // Fetch documents with correct column names
         const { data: documentsData, error: documentsError } = await supabase
           .from('documents')
           .select(`
             id,
-            name,
+            title,
             created_at,
             status,
-            url
+            file_url
           `)
           .eq('user_id', user.id);
 
@@ -76,8 +76,21 @@ const DashboardPage: React.FC = () => {
           throw new Error('Failed to fetch documents');
         }
 
-        setInvestments(investmentsData || []);
-        setDocuments(documentsData || []);
+        // Map the data to match our component's expectations
+        const mappedInvestments = (investmentsData || []).map(inv => ({
+          ...inv,
+          type: inv.investment_type,
+          name: inv.title
+        }));
+
+        const mappedDocuments = (documentsData || []).map(doc => ({
+          ...doc,
+          name: doc.title,
+          url: doc.file_url
+        }));
+
+        setInvestments(mappedInvestments);
+        setDocuments(mappedDocuments);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');
