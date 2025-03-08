@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const isProd = import.meta.env.PROD;
-const productionUrl = 'https://hw-legacy-group-boltnew-direct-6sngrc6ty.vercel.app';
+const productionUrl = import.meta.env.VITE_PRODUCTION_URL || 'https://hw-legacy-group-boltnew-direct-6sngrc6ty.vercel.app';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -11,11 +11,25 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Check if localStorage is available
+const isLocalStorageAvailable = () => {
+  try {
+    const test = '__storage_test__';
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+const storage = isLocalStorageAvailable() ? localStorage : undefined;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: true,
+    persistSession: !!storage,
     storageKey: 'hw-legacy-auth',
-    storage: localStorage,
+    storage: storage,
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce'

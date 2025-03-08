@@ -1,14 +1,26 @@
 import { supabase } from './supabase';
 import { Property, Business, Investment, Document, Transaction } from '../types';
 
+// Define UserStatus type locally since it's not exported from types
+interface UserStatus {
+  email_verified: boolean;
+  phone_verified: boolean;
+  [key: string]: any;
+}
+
 // Properties
 export const getProperties = async () => {
-  const { data, error } = await supabase
-    .from('properties')
-    .select('*')
-    .eq('status', 'published');
-  if (error) throw error;
-  return data as Property[];
+  try {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('status', 'published');
+    if (error) throw error;
+    return data as Property[];
+  } catch (error) {
+    console.error('Error fetching properties:', error);
+    throw error;
+  }
 };
 
 export const getProperty = async (id: string) => {
@@ -43,16 +55,52 @@ export const getBusiness = async (id: string) => {
 
 // Investments
 export const getUserInvestments = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('investments')
-    .select(`
-      *,
-      properties (*),
-      businesses (*)
-    `)
-    .eq('user_id', userId);
-  if (error) throw error;
-  return data as Investment[];
+  try {
+    // First fetch investments
+    const { data: investments, error: investmentsError } = await supabase
+      .from('investments')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (investmentsError) throw investmentsError;
+    if (!investments?.length) return [];
+
+    // Separate property and business IDs
+    const propertyIds = investments
+      .filter(inv => inv.type === 'property')
+      .map(inv => inv.target_id);
+    
+    const businessIds = investments
+      .filter(inv => inv.type === 'business')
+      .map(inv => inv.target_id);
+
+    // Fetch related data in parallel
+    const [propertyData, businessData] = await Promise.all([
+      propertyIds.length > 0 
+        ? supabase.from('properties').select('*').in('id', propertyIds)
+        : { data: [], error: null },
+      businessIds.length > 0
+        ? supabase.from('businesses').select('*').in('id', businessIds)
+        : { data: [], error: null }
+    ]);
+
+    if (propertyData.error) throw propertyData.error;
+    if (businessData.error) throw businessData.error;
+
+    // Map properties and businesses to investments
+    return investments.map(investment => ({
+      ...investment,
+      property: investment.type === 'property'
+        ? propertyData.data?.find(p => p.id === investment.target_id)
+        : undefined,
+      business: investment.type === 'business'
+        ? businessData.data?.find(b => b.id === investment.target_id)
+        : undefined
+    })) as Investment[];
+  } catch (error) {
+    console.error('Error fetching user investments:', error);
+    throw error;
+  }
 };
 
 export const createInvestment = async (investment: Partial<Investment>) => {
@@ -106,15 +154,20 @@ export const getAllUsers = async () => {
   return data;
 };
 
-export const updateUserStatus = async (userId: string, updates: any) => {
-  const { data, error } = await supabase
-    .from('users')
-    .update(updates)
-    .eq('id', userId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+export const updateUserStatus = async (userId: string, updates: Partial<UserStatus>) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating user status:', error);
+    throw error;
+  }
 };
 
 // Property Management

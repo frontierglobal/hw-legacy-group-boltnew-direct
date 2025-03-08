@@ -32,21 +32,37 @@ interface Document {
   file_url: string;
 }
 
+interface LoadingState {
+  investments: boolean;
+  documents: boolean;
+}
+
+interface ErrorState {
+  investments: string | null;
+  documents: string | null;
+}
+
 const DashboardPage: React.FC = () => {
   const { user, initialized } = useAuthStore();
   const [activeTab, setActiveTab] = useState('overview');
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<LoadingState>({
+    investments: true,
+    documents: true
+  });
+  const [error, setError] = useState<ErrorState>({
+    investments: null,
+    documents: null
+  });
   
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchInvestments = async () => {
       if (!user) return;
 
       try {
-        setLoading(true);
-        setError(null);
+        setLoading(prev => ({ ...prev, investments: true }));
+        setError(prev => ({ ...prev, investments: null }));
 
         // Fetch investments
         const { data: investmentsData, error: investmentsError } = await supabase
@@ -65,46 +81,76 @@ const DashboardPage: React.FC = () => {
           .eq('user_id', user.id);
 
         if (investmentsError) {
-          console.error('Error fetching investments:', investmentsError);
           throw new Error('Failed to fetch investments');
+        }
+
+        if (!investmentsData?.length) {
+          setInvestments([]);
+          return;
         }
 
         // Fetch property and business details separately
         const propertyIds = investmentsData
-          ?.filter(inv => inv.type === 'property')
-          .map(inv => inv.target_id) || [];
+          .filter(inv => inv.type === 'property')
+          .map(inv => inv.target_id);
         
         const businessIds = investmentsData
-          ?.filter(inv => inv.type === 'business')
-          .map(inv => inv.target_id) || [];
+          .filter(inv => inv.type === 'business')
+          .map(inv => inv.target_id);
 
-        const [propertyDetails, businessDetails] = await Promise.all([
+        const [propertyData, businessData] = await Promise.all([
           propertyIds.length > 0 
             ? supabase
                 .from('properties')
                 .select('id, title')
                 .in('id', propertyIds)
-            : { data: [] },
+            : { data: [], error: null },
           businessIds.length > 0
             ? supabase
                 .from('businesses')
                 .select('id, name')
                 .in('id', businessIds)
-            : { data: [] }
+            : { data: [], error: null }
         ]);
 
+        if (propertyData.error) {
+          throw new Error('Failed to fetch property details');
+        }
+
+        if (businessData.error) {
+          throw new Error('Failed to fetch business details');
+        }
+
         // Map property and business details to investments
-        const enrichedInvestments = investmentsData?.map(investment => ({
+        const enrichedInvestments = investmentsData.map(investment => ({
           ...investment,
           property: investment.type === 'property' 
-            ? propertyDetails.data?.find(p => p.id === investment.target_id)
+            ? propertyData.data?.find(p => p.id === investment.target_id)
             : undefined,
           business: investment.type === 'business'
-            ? businessDetails.data?.find(b => b.id === investment.target_id)
+            ? businessData.data?.find(b => b.id === investment.target_id)
             : undefined
-        })) || [];
+        }));
 
-        // Fetch documents with correct column names
+        setInvestments(enrichedInvestments);
+      } catch (err) {
+        console.error('Error fetching investments:', err);
+        setError(prev => ({
+          ...prev,
+          investments: err instanceof Error ? err.message : 'Failed to load investments'
+        }));
+      } finally {
+        setLoading(prev => ({ ...prev, investments: false }));
+      }
+    };
+
+    const fetchDocuments = async () => {
+      if (!user) return;
+
+      try {
+        setLoading(prev => ({ ...prev, documents: true }));
+        setError(prev => ({ ...prev, documents: null }));
+
         const { data: documentsData, error: documentsError } = await supabase
           .from('documents')
           .select(`
@@ -117,22 +163,24 @@ const DashboardPage: React.FC = () => {
           .eq('user_id', user.id);
 
         if (documentsError) {
-          console.error('Error fetching documents:', documentsError);
           throw new Error('Failed to fetch documents');
         }
 
-        setInvestments(enrichedInvestments);
         setDocuments(documentsData || []);
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data. Please try again later.');
+        console.error('Error fetching documents:', err);
+        setError(prev => ({
+          ...prev,
+          documents: err instanceof Error ? err.message : 'Failed to load documents'
+        }));
       } finally {
-        setLoading(false);
+        setLoading(prev => ({ ...prev, documents: false }));
       }
     };
 
-    if (initialized) {
-      fetchData();
+    if (initialized && user) {
+      fetchInvestments();
+      fetchDocuments();
     }
   }, [user, initialized]);
   
@@ -183,7 +231,7 @@ const DashboardPage: React.FC = () => {
     );
   }
   
-  if (loading) {
+  if (loading.investments) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -194,11 +242,37 @@ const DashboardPage: React.FC = () => {
     );
   }
   
-  if (error) {
+  if (error.investments) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">Error</h1>
-        <p className="text-gray-600 mb-6">{error}</p>
+        <p className="text-gray-600 mb-6">{error.investments}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  
+  if (loading.documents) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your documents...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error.documents) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Error</h1>
+        <p className="text-gray-600 mb-6">{error.documents}</p>
         <button 
           onClick={() => window.location.reload()}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
