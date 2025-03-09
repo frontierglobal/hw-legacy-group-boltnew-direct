@@ -19,6 +19,10 @@ BEGIN
     DROP POLICY IF EXISTS "Anyone can read roles" ON roles;
     DROP POLICY IF EXISTS "Users can read properties" ON properties;
     DROP POLICY IF EXISTS "Users can read businesses" ON businesses;
+    DROP POLICY IF EXISTS "Anyone can read pages" ON pages;
+    DROP POLICY IF EXISTS "Admins can manage pages" ON pages;
+    DROP POLICY IF EXISTS "Anyone can read content" ON content;
+    DROP POLICY IF EXISTS "Admins can manage content" ON content;
     
     -- Drop views and functions after policies
     DROP VIEW IF EXISTS admin_users;
@@ -101,6 +105,24 @@ CREATE TABLE IF NOT EXISTS documents (
     file_url text NOT NULL,
     status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Create pages table if it doesn't exist
+CREATE TABLE IF NOT EXISTS pages (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    title text NOT NULL,
+    slug text NOT NULL UNIQUE,
+    content text NOT NULL,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Create content table if it doesn't exist
+CREATE TABLE IF NOT EXISTS content (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    key text NOT NULL UNIQUE,
+    value text NOT NULL,
     updated_at timestamptz DEFAULT now()
 );
 
@@ -248,6 +270,49 @@ WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 CREATE POLICY "Users can delete their own documents"
 ON documents FOR DELETE
 USING (auth.uid() = user_id OR is_admin(auth.uid()));
+
+-- Enable RLS on new tables
+ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content ENABLE ROW LEVEL SECURITY;
+
+-- Create default policies to deny all access
+ALTER TABLE pages FORCE ROW LEVEL SECURITY;
+ALTER TABLE content FORCE ROW LEVEL SECURITY;
+
+-- Grant necessary permissions for new tables
+GRANT SELECT ON pages TO authenticated;
+GRANT SELECT ON content TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON pages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON content TO authenticated;
+
+-- Create indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug);
+CREATE INDEX IF NOT EXISTS idx_content_key ON content(key);
+
+-- Create policies for pages
+CREATE POLICY "Anyone can read pages"
+ON pages FOR SELECT
+USING (true);
+
+CREATE POLICY "Admins can manage pages"
+ON pages FOR ALL
+USING (is_admin(auth.uid()))
+WITH CHECK (is_admin(auth.uid()));
+
+-- Create policies for content
+CREATE POLICY "Anyone can read content"
+ON content FOR SELECT
+USING (true);
+
+CREATE POLICY "Admins can manage content"
+ON content FOR ALL
+USING (is_admin(auth.uid()))
+WITH CHECK (is_admin(auth.uid()));
+
+-- Add home_title to content if it doesn't exist
+INSERT INTO content (key, value)
+VALUES ('home_title', 'Welcome to Bolt.new')
+ON CONFLICT (key) DO NOTHING;
 
 -- Create trigger function for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

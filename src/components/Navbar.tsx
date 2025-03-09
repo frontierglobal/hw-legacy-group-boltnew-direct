@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, Menu, X, LogOut } from 'lucide-react';
-import { signOut } from '../lib/supabase';
-import { useAuthStore } from '../lib/store';
+import { Building2, Menu, X, LogOut, Settings } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, initialize } = useAuthStore();
+  const { user, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (!error) {
-      await initialize(); // Re-initialize auth state after signout
+    try {
+      await signOut();
       navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
   };
 
@@ -38,7 +38,14 @@ const Navbar: React.FC = () => {
               
               {user ? (
                 <>
-                  <Link to="/dashboard" className="px-3 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700">Dashboard</Link>
+                  {isAdmin ? (
+                    <Link to="/admin" className="px-3 py-2 rounded-md text-sm font-medium bg-purple-600 hover:bg-purple-700">
+                      <Settings className="h-4 w-4 inline mr-1" />
+                      Admin
+                    </Link>
+                  ) : (
+                    <Link to="/dashboard" className="px-3 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700">Dashboard</Link>
+                  )}
                   <button 
                     onClick={handleSignOut}
                     className="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-800"
@@ -79,7 +86,14 @@ const Navbar: React.FC = () => {
             
             {user ? (
               <>
-                <Link to="/dashboard" className="block px-3 py-2 rounded-md text-base font-medium bg-blue-600 hover:bg-blue-700">Dashboard</Link>
+                {isAdmin ? (
+                  <Link to="/admin" className="flex items-center px-3 py-2 rounded-md text-base font-medium bg-purple-600 hover:bg-purple-700">
+                    <Settings className="h-4 w-4 mr-1" />
+                    Admin
+                  </Link>
+                ) : (
+                  <Link to="/dashboard" className="block px-3 py-2 rounded-md text-base font-medium bg-blue-600 hover:bg-blue-700">Dashboard</Link>
+                )}
                 <button 
                   onClick={handleSignOut}
                   className="flex items-center w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-gray-800"

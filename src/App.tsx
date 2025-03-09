@@ -28,10 +28,11 @@ import AdminInvestmentsPage from './pages/admin/InvestmentsPage';
 import AdminDocumentsPage from './pages/admin/DocumentsPage';
 import AuditLogsPage from './pages/admin/AuditLogsPage';
 import ReportsPage from './pages/admin/ReportsPage';
-import { useAuthStore } from './lib/store';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthCallback from './pages/AuthCallback';
-import { supabase } from './lib/supabase';
 import { logger } from './lib/logger';
+import AdminPage from './pages/Admin';
+import Page from './pages/Page';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,151 +43,127 @@ const queryClient = new QueryClient({
   },
 });
 
-function App() {
-  const { user, isAdmin, initialize, initialized } = useAuthStore();
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isLoading } = useAuth();
 
-  useEffect(() => {
-    logger.info('App mounted, initializing auth store...');
-    initialize().catch(error => {
-      logger.error('Failed to initialize auth store:', error);
-    });
-
-    // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email);
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        await initialize();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [initialize]);
-
-  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    if (!initialized) {
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      );
-    }
-
-    if (!user) {
-      return <Navigate to="/login" replace />;
-    }
-
-    return <>{children}</>;
-  };
-
-  const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-    if (!initialized) {
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      );
-    }
-
-    if (!user || !isAdmin) {
-      return <Navigate to="/" replace />;
-    }
-
-    return <>{children}</>;
-  };
-
-  if (!initialized) {
-    logger.debug('App not initialized yet, showing loading state...');
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <span className="ml-2 text-gray-600">Loading...</span>
       </div>
     );
   }
 
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!user || !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
-        <Suspense fallback={
-          <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-            <span className="ml-2 text-gray-600">Loading...</span>
-          </div>
-        }>
-          <Router>
-            <div className="flex flex-col min-h-screen">
-              <Routes>
-                {/* Admin routes */}
-                <Route
-                  path="/admin/*"
-                  element={
-                    <AdminRoute>
-                      <AdminLayout>
-                        <Routes>
-                          <Route path="/" element={<AdminDashboard />} />
-                          <Route path="/users" element={<UsersPage />} />
-                          <Route path="/properties" element={<AdminPropertiesPage />} />
-                          <Route path="/businesses" element={<AdminBusinessesPage />} />
-                          <Route path="/investments" element={<AdminInvestmentsPage />} />
-                          <Route path="/documents" element={<AdminDocumentsPage />} />
-                          <Route path="/audit-logs" element={<AuditLogsPage />} />
-                          <Route path="/reports" element={<ReportsPage />} />
-                        </Routes>
-                      </AdminLayout>
-                    </AdminRoute>
-                  }
-                />
+        <Router>
+          <AuthProvider>
+            <Suspense fallback={
+              <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                <span className="ml-2 text-gray-600">Loading...</span>
+              </div>
+            }>
+              <div className="flex flex-col min-h-screen">
+                <Routes>
+                  {/* Admin routes */}
+                  <Route
+                    path="/admin/*"
+                    element={
+                      <AdminRoute>
+                        <AdminLayout>
+                          <Routes>
+                            <Route path="/" element={<AdminPage />} />
+                            <Route path="/users" element={<UsersPage />} />
+                            <Route path="/properties" element={<AdminPropertiesPage />} />
+                            <Route path="/businesses" element={<AdminBusinessesPage />} />
+                            <Route path="/investments" element={<AdminInvestmentsPage />} />
+                            <Route path="/documents" element={<AdminDocumentsPage />} />
+                            <Route path="/audit-logs" element={<AuditLogsPage />} />
+                            <Route path="/reports" element={<ReportsPage />} />
+                          </Routes>
+                        </AdminLayout>
+                      </AdminRoute>
+                    }
+                  />
 
-                {/* Public routes */}
-                <Route
-                  path="/*"
-                  element={
-                    <>
-                      <Navbar />
-                      <main className="flex-grow">
-                        <Routes>
-                          <Route path="/" element={<HomePage />} />
-                          <Route path="/about" element={<AboutPage />} />
-                          <Route path="/properties" element={<PropertiesPage />} />
-                          <Route path="/properties/:id" element={<PropertyDetailPage />} />
-                          <Route path="/businesses" element={<BusinessesPage />} />
-                          <Route path="/businesses/:id" element={<BusinessDetailPage />} />
-                          <Route path="/login" element={<LoginPage />} />
-                          <Route path="/register" element={<RegisterPage />} />
-                          <Route path="/auth/callback" element={<AuthCallback />} />
-                          <Route path="/faq" element={<FAQPage />} />
-                          <Route path="/terms" element={<TermsPage />} />
-                          <Route path="/privacy" element={<PrivacyPage />} />
-                          <Route path="/investment-process" element={<InvestmentProcessPage />} />
-                          <Route
-                            path="/dashboard"
-                            element={
-                              <ProtectedRoute>
-                                <DashboardPage />
-                              </ProtectedRoute>
-                            }
-                          />
-                          <Route
-                            path="/profile"
-                            element={
-                              <ProtectedRoute>
-                                <ProfilePage />
-                              </ProtectedRoute>
-                            }
-                          />
-                        </Routes>
-                      </main>
-                      <Footer />
-                    </>
-                  }
-                />
-              </Routes>
-              <Toaster position="top-right" />
-            </div>
-          </Router>
-        </Suspense>
+                  {/* Public routes */}
+                  <Route
+                    path="/*"
+                    element={
+                      <>
+                        <Navbar />
+                        <main className="flex-grow">
+                          <Routes>
+                            <Route path="/" element={<HomePage />} />
+                            <Route path="/about" element={<AboutPage />} />
+                            <Route path="/properties" element={<PropertiesPage />} />
+                            <Route path="/properties/:id" element={<PropertyDetailPage />} />
+                            <Route path="/businesses" element={<BusinessesPage />} />
+                            <Route path="/businesses/:id" element={<BusinessDetailPage />} />
+                            <Route path="/login" element={<LoginPage />} />
+                            <Route path="/register" element={<RegisterPage />} />
+                            <Route path="/auth/callback" element={<AuthCallback />} />
+                            <Route path="/faq" element={<FAQPage />} />
+                            <Route path="/terms" element={<TermsPage />} />
+                            <Route path="/privacy" element={<PrivacyPage />} />
+                            <Route path="/investment-process" element={<InvestmentProcessPage />} />
+                            <Route
+                              path="/dashboard"
+                              element={
+                                <ProtectedRoute>
+                                  <DashboardPage />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/profile"
+                              element={
+                                <ProtectedRoute>
+                                  <ProfilePage />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route path="/:slug" element={<Page />} />
+                          </Routes>
+                        </main>
+                        <Footer />
+                      </>
+                    }
+                  />
+                </Routes>
+                <Toaster position="top-right" />
+              </div>
+            </Suspense>
+          </AuthProvider>
+        </Router>
       </ErrorBoundary>
     </QueryClientProvider>
   );
