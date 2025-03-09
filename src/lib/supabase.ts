@@ -37,13 +37,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Initialize MCP connection
-let mcpConnection: any;
-try {
-  mcpConnection = await mcpManager.connect('supabase');
-  logger.info('MCP connection established successfully');
-} catch (error) {
-  logger.error('Failed to establish MCP connection:', error as Error);
-  // Continue without MCP - fallback to regular Supabase client
+let mcpConnection: any = null;
+
+// Function to initialize MCP connection
+async function initializeMCP() {
+  try {
+    mcpConnection = await mcpManager.connect('supabase');
+    logger.info('MCP connection established successfully');
+  } catch (error) {
+    logger.error('Failed to establish MCP connection:', error as Error);
+    // Continue without MCP - fallback to regular Supabase client
+  }
 }
 
 // Check if localStorage is available
@@ -85,6 +89,11 @@ const supabaseOptions = {
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
+
+// Initialize MCP connection
+initializeMCP().catch(error => {
+  logger.error('Failed to initialize MCP:', error as Error);
+});
 
 // Set up auth state change listener with enhanced logging
 supabase.auth.onAuthStateChange((event, session) => {

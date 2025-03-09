@@ -4,7 +4,7 @@
       {
         "name": "supabase",
         "type": "postgresql",
-        "url": "postgresql://postgres.guyjytkicpevzceodmwk:d!GeA5RGP3Y*KtRI@aws-0-eu-west-2.pooler.supabase.com:6543/postgres",
+        "url": "postgresql://postgres:d!GeA5RGP3Y*KtRI@guyjytkicpevzceodmwk.supabase.co:5432/postgres",
         "pool": {
           "max": 20,
           "min": 2,
@@ -27,6 +27,10 @@
           "queries": true,
           "slowQueryThresholdMillis": 1000
         }
+      },
+      {
+        "name": "git",
+        "url": "https://github.com/frontierglobal/hw-legacy-group-boltnew-direct.git"
       }
     ],
     "cursorAI": {
