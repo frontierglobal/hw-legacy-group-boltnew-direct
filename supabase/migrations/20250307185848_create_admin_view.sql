@@ -7,12 +7,15 @@ BEGIN
     -- Drop policies if they exist
     DROP POLICY IF EXISTS "Users can read their own roles" ON user_roles;
     DROP POLICY IF EXISTS "Users can manage their own roles" ON user_roles;
+    DROP POLICY IF EXISTS "Users can delete their own roles" ON user_roles;
     DROP POLICY IF EXISTS "Users can read their own investments" ON investments;
     DROP POLICY IF EXISTS "Users can manage their own investments" ON investments;
     DROP POLICY IF EXISTS "Users can update their own investments" ON investments;
+    DROP POLICY IF EXISTS "Users can delete their own investments" ON investments;
     DROP POLICY IF EXISTS "Users can read their own documents" ON documents;
     DROP POLICY IF EXISTS "Users can manage their own documents" ON documents;
     DROP POLICY IF EXISTS "Users can update their own documents" ON documents;
+    DROP POLICY IF EXISTS "Users can delete their own documents" ON documents;
     DROP POLICY IF EXISTS "Anyone can read roles" ON roles;
     
     -- Drop views and functions after policies
@@ -120,6 +123,12 @@ ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
+-- Create default policies to deny all access
+ALTER TABLE roles FORCE ROW LEVEL SECURITY;
+ALTER TABLE user_roles FORCE ROW LEVEL SECURITY;
+ALTER TABLE investments FORCE ROW LEVEL SECURITY;
+ALTER TABLE documents FORCE ROW LEVEL SECURITY;
+
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON roles TO authenticated;
@@ -139,69 +148,59 @@ CREATE POLICY "Anyone can read roles"
 ON roles FOR SELECT
 USING (true);
 
+-- User roles policies
 CREATE POLICY "Users can read their own roles"
 ON user_roles FOR SELECT
-USING (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
 
 CREATE POLICY "Users can manage their own roles"
 ON user_roles FOR INSERT
-WITH CHECK (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 
+CREATE POLICY "Users can update their own roles"
+ON user_roles FOR UPDATE
+USING (auth.uid() = user_id OR is_admin(auth.uid()))
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
+
+CREATE POLICY "Users can delete their own roles"
+ON user_roles FOR DELETE
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
+
+-- Investment policies
 CREATE POLICY "Users can read their own investments"
 ON investments FOR SELECT
-USING (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
 
 CREATE POLICY "Users can manage their own investments"
 ON investments FOR INSERT
-WITH CHECK (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 
 CREATE POLICY "Users can update their own investments"
 ON investments FOR UPDATE
-USING (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-)
-WITH CHECK (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+USING (auth.uid() = user_id OR is_admin(auth.uid()))
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 
+CREATE POLICY "Users can delete their own investments"
+ON investments FOR DELETE
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
+
+-- Document policies
 CREATE POLICY "Users can read their own documents"
 ON documents FOR SELECT
-USING (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
 
 CREATE POLICY "Users can manage their own documents"
 ON documents FOR INSERT
-WITH CHECK (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 
 CREATE POLICY "Users can update their own documents"
 ON documents FOR UPDATE
-USING (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-)
-WITH CHECK (
-    auth.uid() = user_id OR 
-    is_admin(auth.uid())
-);
+USING (auth.uid() = user_id OR is_admin(auth.uid()))
+WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
+
+CREATE POLICY "Users can delete their own documents"
+ON documents FOR DELETE
+USING (auth.uid() = user_id OR is_admin(auth.uid()));
 
 -- Create trigger function for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
