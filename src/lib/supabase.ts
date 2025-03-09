@@ -5,13 +5,34 @@ import { logger } from './logger';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Log environment info (without sensitive data)
+logger.info('Environment check:', {
+  isDevelopment: import.meta.env.DEV,
+  isProduction: import.meta.env.PROD,
+  mode: import.meta.env.MODE,
+  hasSupabaseUrl: !!supabaseUrl,
+  hasSupabaseKey: !!supabaseAnonKey
+});
+
 if (!supabaseUrl || !supabaseAnonKey) {
-  logger.error(
-    'Missing Supabase credentials',
-    new Error('Missing Supabase credentials. Please check your environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY'),
-    { context: { hasUrl: !!supabaseUrl, hasAnonKey: !!supabaseAnonKey } }
-  );
-  throw new Error('Missing Supabase credentials. Please check your environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+  const missingVars = [];
+  if (!supabaseUrl) missingVars.push('VITE_SUPABASE_URL');
+  if (!supabaseAnonKey) missingVars.push('VITE_SUPABASE_ANON_KEY');
+
+  const errorMessage = `Missing required environment variables: ${missingVars.join(', ')}. Please check:
+1. Local development: Ensure these variables are in your .env file
+2. Production: Ensure these variables are set in your Vercel project settings
+3. After adding variables, rebuild and redeploy the application`;
+
+  logger.error('Configuration Error:', new Error(errorMessage));
+  
+  // In development, show more helpful error
+  if (import.meta.env.DEV) {
+    throw new Error(errorMessage);
+  } else {
+    // In production, show a more generic error
+    throw new Error('Application configuration error. Please contact support.');
+  }
 }
 
 // Check if localStorage is available
@@ -28,19 +49,25 @@ const isLocalStorageAvailable = () => {
 };
 
 // Initialize Supabase client
-logger.info('Initializing Supabase client...', { url: supabaseUrl });
+logger.info('Initializing Supabase client...');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: isLocalStorageAvailable(),
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+    debug: import.meta.env.DEV
   }
 });
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  logger.info('Auth state changed:', { event, hasSession: !!session });
+  logger.info('Auth state changed:', { 
+    event, 
+    hasSession: !!session,
+    userId: session?.user?.id
+  });
 });
 
 // Helper functions with logging

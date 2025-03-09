@@ -1,106 +1,68 @@
-import React from 'react';
+import React, { Component, ErrorInfo } from 'react';
+import { logger } from '../lib/logger';
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  errorInfo: React.ErrorInfo | null;
+interface Props {
+  children: React.ReactNode;
 }
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  ErrorBoundaryState
-> {
-  constructor(props: { children: React.ReactNode }) {
+interface State {
+  hasError: boolean;
+  error: Error | null;
+  isConfigError: boolean;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = {
+      hasError: false,
+      error: null,
+      isConfigError: false
+    };
   }
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): State {
+    const isConfigError = error.message.includes('configuration error') || 
+                         error.message.includes('environment variables');
+    return {
+      hasError: true,
+      error,
+      isConfigError
+    };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    this.setState({ errorInfo });
-    
-    // Log the error
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
-    // Here you could send to an error reporting service
-    this.reportError(error, errorInfo);
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    logger.error('Error caught by boundary:', error, { errorInfo });
   }
-
-  private reportError = async (error: Error, errorInfo: React.ErrorInfo) => {
-    try {
-      // Example error reporting - replace with your actual error reporting service
-      const errorReport = {
-        error: {
-          message: error.message,
-          stack: error.stack,
-          name: error.name
-        },
-        errorInfo: {
-          componentStack: errorInfo.componentStack
-        },
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        userAgent: navigator.userAgent
-      };
-
-      // Log to console in development
-      if (import.meta.env.DEV) {
-        console.log('Error Report:', errorReport);
-      }
-
-      // TODO: Send to your error reporting service
-      // await fetch('/api/error-reporting', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(errorReport)
-      // });
-    } catch (reportError) {
-      console.error('Failed to report error:', reportError);
-    }
-  };
-
-  private handleReload = () => {
-    // Clear any persisted error state
-    localStorage.removeItem('hw-legacy-auth-store');
-    // Reload the page
-    window.location.reload();
-  };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="max-w-lg w-full bg-white rounded-lg shadow-lg p-6">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
-            <div className="bg-red-50 p-4 rounded-md mb-4">
-              <p className="text-sm text-red-700 whitespace-pre-wrap font-mono">
-                {this.state.error?.toString()}
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+          <div className="max-w-md w-full space-y-8">
+            <div>
+              <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                {this.state.isConfigError ? 'Configuration Error' : 'Something went wrong'}
+              </h2>
+              <p className="mt-2 text-center text-sm text-gray-600">
+                {this.state.isConfigError ? (
+                  <>
+                    The application is not configured correctly. This is likely a temporary issue.
+                    <br />
+                    Please try again in a few minutes.
+                  </>
+                ) : (
+                  this.state.error?.message || 'An unexpected error occurred'
+                )}
               </p>
-              {import.meta.env.DEV && this.state.errorInfo && (
-                <details className="mt-2">
-                  <summary className="text-sm text-red-700 cursor-pointer">Stack trace</summary>
-                  <pre className="mt-2 text-xs text-red-700 overflow-auto">
-                    {this.state.errorInfo.componentStack}
-                  </pre>
-                </details>
-              )}
-            </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={this.handleReload}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Reload Page
-              </button>
-              <button
-                onClick={() => window.location.href = '/'}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-              >
-                Go to Homepage
-              </button>
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Try again
+                </button>
+              </div>
             </div>
           </div>
         </div>
