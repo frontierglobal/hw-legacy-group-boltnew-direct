@@ -8,6 +8,19 @@
       {
         "name": "git",
         "url": "https://github.com/frontierglobal/hw-legacy-group-boltnew-direct.git"
+      },
+      {
+        "name": "sequential-thinking",
+        "type": "command",
+        "command": "npx -y @modelcontextprotocol/server-sequential-thinking",
+        "options": {
+          "stdio": "pipe",
+          "shell": true,
+          "env": {
+            "NODE_ENV": "production"
+          }
+        },
+        "autostart": true
       }
     ],
     "cursorAI": {
