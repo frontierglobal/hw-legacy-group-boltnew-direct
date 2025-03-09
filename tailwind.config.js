@@ -1,4 +1,7 @@
 /** @type {import('tailwindcss').Config} */
+import forms from '@tailwindcss/forms';
+import typography from '@tailwindcss/typography';
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -27,7 +30,7 @@ export default {
           700: '#334155',
           800: '#1E293B',
           900: '#0F172A',
-        }
+        },
       },
       fontFamily: {
         sans: ['Inter var', 'system-ui', '-apple-system', 'sans-serif'],
@@ -38,11 +41,8 @@ export default {
       maxWidth: {
         '8xl': '88rem',
         '9xl': '96rem',
-      }
+      },
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-    require('@tailwindcss/typography'),
-  ],
+  plugins: [forms, typography],
 };
