@@ -1,7 +1,9 @@
 {
+    "version": "1.0",
     "servers": [
       {
         "name": "supabase",
+        "type": "postgresql",
         "url": "postgresql://postgres.guyjytkicpevzceodmwk:d!GeA5RGP3Y*KtRI@aws-0-eu-west-2.pooler.supabase.com:6543/postgres",
         "pool": {
           "max": 20,
@@ -33,11 +35,21 @@
         "autoComplete": true,
         "syntaxHighlighting": true,
         "diagnostics": true,
-        "codeActions": true
+        "codeActions": true,
+        "inlineCompletions": true
       },
       "modelConfig": {
         "temperature": 0.7,
-        "maxTokens": 1000
+        "maxTokens": 1000,
+        "model": "gpt-4"
       }
+    },
+    "workspace": {
+      "root": ".",
+      "exclude": [
+        "node_modules",
+        "dist",
+        ".git"
+      ]
     }
   }
