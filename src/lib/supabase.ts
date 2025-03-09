@@ -118,7 +118,7 @@ export const signIn = async (email: string, password: string) => {
         mcpEnabled: !!mcpConnection 
       });
     }
-    return { data, error };
+  return { data, error };
   } catch (error) {
     logger.error('Unexpected error during sign in:', error as Error);
     throw error;
@@ -128,7 +128,7 @@ export const signIn = async (email: string, password: string) => {
 export const signOut = async () => {
   logger.debug('Attempting sign out...');
   try {
-    const { error } = await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
     if (error) {
       logger.error('Sign out error:', error);
     } else {
@@ -144,7 +144,7 @@ export const signOut = async () => {
         }
       }
     }
-    return { error };
+  return { error };
   } catch (error) {
     logger.error('Unexpected error during sign out:', error as Error);
     throw error;
