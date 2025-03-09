@@ -17,6 +17,7 @@ const HomePage: React.FC = () => {
   const [content, setContent] = useState<ContentData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState('Welcome');
 
   // Get only published properties and businesses for the featured section
   const featuredProperties = properties.filter(p => p.status === 'published').slice(0, 3);
@@ -40,6 +41,21 @@ const HomePage: React.FC = () => {
         }), {} as ContentData);
 
         setContent(contentMap);
+
+        const { data: titleData, error: titleError } = await supabase
+          .from('content')
+          .select('value')
+          .eq('key', 'home_title')
+          .single();
+
+        if (titleError) {
+          logger.error('Error fetching home title:', titleError);
+          return;
+        }
+
+        if (titleData?.value) {
+          setTitle(titleData.value);
+        }
       } catch (err) {
         const error = err as Error;
         logger.error('Error fetching content:', error);
