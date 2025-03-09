@@ -82,16 +82,13 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 function App() {
   useEffect(() => {
-    const initializeMCP = async () => {
-      try {
-        await mcpManager.initialize('supabase');
+    mcpManager.initialize('supabase')
+      .then(() => {
         logger.info('MCP connection established successfully');
-      } catch (error) {
+      })
+      .catch(error => {
         logger.error('Failed to establish MCP connection:', error instanceof Error ? error : new Error(String(error)));
-      }
-    };
-
-    initializeMCP();
+      });
 
     return () => {
       mcpManager.disconnectAll();

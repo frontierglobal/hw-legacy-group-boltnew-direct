@@ -44,6 +44,7 @@ export class MCPManager {
     private reconnectAttempts: Map<string, number> = new Map();
     private messageHandlers: Map<string, Set<(data: any) => void>> = new Map();
     private initialized: boolean = false;
+    private connectionPromises: Map<string, Promise<void>> = new Map();
 
     private constructor(config: Partial<MCPConfig> = {}) {
         this.config = { ...defaultConfig, ...config };
@@ -57,66 +58,88 @@ export class MCPManager {
         return MCPManager.instance;
     }
 
-    async initialize(serverName: string = this.config.defaultServer): Promise<void> {
+    initialize(serverName: string = this.config.defaultServer): Promise<void> {
         if (this.initialized) {
             logger.warn('MCP Manager already initialized');
-            return;
+            return Promise.resolve();
         }
 
-        try {
-            await this.connect(serverName);
-            this.initialized = true;
-            logger.info('MCP Manager initialized successfully');
-        } catch (error) {
-            logger.error('Failed to initialize MCP Manager:', error instanceof Error ? error : new Error(String(error)));
-            throw error;
-        }
+        return this.connect(serverName)
+            .then(() => {
+                this.initialized = true;
+                logger.info('MCP Manager initialized successfully');
+            })
+            .catch(error => {
+                logger.error('Failed to initialize MCP Manager:', error instanceof Error ? error : new Error(String(error)));
+                throw error;
+            });
     }
 
-    async connect(serverName: string = this.config.defaultServer): Promise<void> {
+    connect(serverName: string = this.config.defaultServer): Promise<void> {
         const server = this.config.servers[serverName];
         if (!server) {
-            throw new Error(`Server ${serverName} not found in configuration`);
+            return Promise.reject(new Error(`Server ${serverName} not found in configuration`));
         }
 
         if (this.connections.has(serverName)) {
             logger.warn(`Already connected to server ${serverName}`);
-            return;
+            return Promise.resolve();
         }
 
-        try {
-            const ws = new WebSocket(`${server.protocol}://${server.host}:${server.port}`);
-            
-            ws.onopen = () => {
-                logger.info(`Connected to MCP server ${serverName}`);
-                this.connections.set(serverName, ws);
-                this.reconnectAttempts.set(serverName, 0);
-            };
-
-            ws.onclose = () => {
-                logger.warn(`Connection to ${serverName} closed`);
-                this.handleDisconnect(serverName);
-            };
-
-            ws.onerror = (event: Event) => {
-                const error = new Error(`WebSocket error for ${serverName}`);
-                logger.error(error.message, error);
-                this.handleDisconnect(serverName);
-            };
-
-            ws.onmessage = (event: MessageEvent) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    this.handleMessage(serverName, message);
-                } catch (error) {
-                    logger.error(`Error parsing message from ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
-                }
-            };
-
-        } catch (error) {
-            logger.error(`Failed to connect to ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
-            throw error;
+        // If there's already a connection attempt in progress, return that promise
+        if (this.connectionPromises.has(serverName)) {
+            return this.connectionPromises.get(serverName)!;
         }
+
+        const connectionPromise = new Promise<void>((resolve, reject) => {
+            try {
+                const ws = new WebSocket(`${server.protocol}://${server.host}:${server.port}`);
+                
+                const timeout = setTimeout(() => {
+                    ws.close();
+                    reject(new Error(`Connection timeout for ${serverName}`));
+                }, this.config.connectionTimeout);
+
+                ws.onopen = () => {
+                    clearTimeout(timeout);
+                    logger.info(`Connected to MCP server ${serverName}`);
+                    this.connections.set(serverName, ws);
+                    this.reconnectAttempts.set(serverName, 0);
+                    this.connectionPromises.delete(serverName);
+                    resolve();
+                };
+
+                ws.onclose = () => {
+                    clearTimeout(timeout);
+                    logger.warn(`Connection to ${serverName} closed`);
+                    this.handleDisconnect(serverName);
+                };
+
+                ws.onerror = (event: Event) => {
+                    clearTimeout(timeout);
+                    const error = new Error(`WebSocket error for ${serverName}`);
+                    logger.error(error.message, error);
+                    this.handleDisconnect(serverName);
+                    reject(error);
+                };
+
+                ws.onmessage = (event: MessageEvent) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        this.handleMessage(serverName, message);
+                    } catch (error) {
+                        logger.error(`Error parsing message from ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
+                    }
+                };
+
+            } catch (error) {
+                this.connectionPromises.delete(serverName);
+                reject(error instanceof Error ? error : new Error(String(error)));
+            }
+        });
+
+        this.connectionPromises.set(serverName, connectionPromise);
+        return connectionPromise;
     }
 
     private handleDisconnect(serverName: string): void {
