@@ -76,7 +76,7 @@ INSERT INTO roles (name)
 VALUES ('admin')
 ON CONFLICT (name) DO NOTHING;
 
--- Get admin role id
+-- Get admin role id and assign to test user
 DO $$
 DECLARE
     admin_role_id uuid;
