@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { mcpManager } from './mcp';
 
 // Check if required environment variables are present
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -35,6 +36,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   }
 }
 
+// Initialize MCP connection
+let mcpConnection: any;
+try {
+  mcpConnection = await mcpManager.connect('supabase');
+  logger.info('MCP connection established successfully');
+} catch (error) {
+  logger.error('Failed to establish MCP connection:', error as Error);
+  // Continue without MCP - fallback to regular Supabase client
+}
+
 // Check if localStorage is available
 const isLocalStorageAvailable = () => {
   try {
@@ -48,29 +59,44 @@ const isLocalStorageAvailable = () => {
   }
 };
 
-// Initialize Supabase client
+// Initialize Supabase client with MCP configuration if available
 logger.info('Initializing Supabase client...');
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const supabaseOptions = {
   auth: {
     persistSession: isLocalStorageAvailable(),
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
     debug: import.meta.env.DEV
-  }
-});
+  },
+  ...(mcpConnection && {
+    db: {
+      schema: 'public',
+      pool: mcpConnection.pool,
+      ssl: mcpManager.getServerConfig('supabase')?.ssl,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      }
+    }
+  })
+};
 
-// Set up auth state change listener
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
+
+// Set up auth state change listener with enhanced logging
 supabase.auth.onAuthStateChange((event, session) => {
   logger.info('Auth state changed:', { 
     event, 
     hasSession: !!session,
-    userId: session?.user?.id
+    userId: session?.user?.id,
+    mcpEnabled: !!mcpConnection
   });
 });
 
-// Helper functions with logging
+// Enhanced helper functions with MCP support
 export const signIn = async (email: string, password: string) => {
   logger.debug('Attempting sign in...', { email });
   try {
@@ -78,7 +104,10 @@ export const signIn = async (email: string, password: string) => {
     if (error) {
       logger.error('Sign in error:', error);
     } else {
-      logger.info('Sign in successful', { userId: data.user?.id });
+      logger.info('Sign in successful', { 
+        userId: data.user?.id,
+        mcpEnabled: !!mcpConnection 
+      });
     }
     return { data, error };
   } catch (error) {
@@ -95,6 +124,16 @@ export const signOut = async () => {
       logger.error('Sign out error:', error);
     } else {
       logger.info('Sign out successful');
+      
+      // Clean up MCP connection if exists
+      if (mcpConnection) {
+        try {
+          await mcpManager.disconnect('supabase');
+          logger.info('MCP connection closed successfully');
+        } catch (mcpError) {
+          logger.error('Error closing MCP connection:', mcpError as Error);
+        }
+      }
     }
     return { error };
   } catch (error) {
@@ -126,7 +165,10 @@ export const getCurrentSession = async () => {
     if (error) {
       logger.error('Get session error:', error);
     } else {
-      logger.info('Got current session:', { hasSession: !!session });
+      logger.info('Got current session:', { 
+        hasSession: !!session,
+        mcpEnabled: !!mcpConnection 
+      });
     }
     return { session, error };
   } catch (error) {
@@ -160,5 +202,17 @@ export const signUp = async (email: string, password: string) => {
   } catch (error) {
     logger.error('Unexpected error during sign up:', error as Error);
     throw error;
+  }
+};
+
+// Clean up function to be called on application shutdown
+export const cleanup = async () => {
+  if (mcpConnection) {
+    try {
+      await mcpManager.disconnectAll();
+      logger.info('All MCP connections closed successfully');
+    } catch (error) {
+      logger.error('Error closing MCP connections:', error as Error);
+    }
   }
 };

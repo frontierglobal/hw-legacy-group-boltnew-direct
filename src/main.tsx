@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { logger } from './lib/logger';
+import { cleanup } from './lib/supabase';
 
 logger.info('Application starting...');
 
@@ -16,6 +17,13 @@ try {
   );
 
   logger.info('Application rendered successfully');
+
+  // Handle cleanup on window unload
+  window.addEventListener('unload', () => {
+    cleanup().catch(error => {
+      logger.error('Error during cleanup:', error as Error);
+    });
+  });
 } catch (error) {
   logger.error('Failed to start application:', error as Error);
   
