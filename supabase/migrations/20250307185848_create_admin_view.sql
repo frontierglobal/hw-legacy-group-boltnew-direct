@@ -17,9 +17,11 @@ BEGIN
     DROP VIEW IF EXISTS admin_users;
     DROP FUNCTION IF EXISTS is_admin(uuid);
     DROP FUNCTION IF EXISTS refresh_admin_users();
+    DROP FUNCTION IF EXISTS update_updated_at_column();
 EXCEPTION
     WHEN undefined_table THEN 
-        -- Handle case where tables don't exist yet
+        NULL;
+    WHEN undefined_function THEN
         NULL;
 END $$;
 
@@ -72,6 +74,20 @@ INSERT INTO roles (name)
 VALUES ('admin')
 ON CONFLICT (name) DO NOTHING;
 
+-- Get admin role id
+DO $$
+DECLARE
+    admin_role_id uuid;
+    test_user_id uuid := 'd642783d-4783-4197-a4b0-60c61b9e3725';
+BEGIN
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    -- Make test user an admin
+    INSERT INTO user_roles (user_id, role_id)
+    VALUES (test_user_id, admin_role_id)
+    ON CONFLICT (user_id, role_id) DO NOTHING;
+END $$;
+
 -- Create base function to check admin status
 CREATE OR REPLACE FUNCTION is_admin(check_user_id uuid)
 RETURNS boolean AS $$
@@ -116,37 +132,73 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
 CREATE INDEX IF NOT EXISTS idx_investments_user_id ON investments(user_id);
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
 
--- Create policies with proper checks
+-- Create simplified policies
 CREATE POLICY "Anyone can read roles"
 ON roles FOR SELECT
-TO authenticated
 USING (true);
 
-CREATE POLICY "Users can manage their own roles"
-ON user_roles 
-FOR ALL
-TO authenticated
+CREATE POLICY "Users can read their own roles"
+ON user_roles FOR SELECT
 USING (
     auth.uid() = user_id OR 
-    (SELECT is_admin(auth.uid()))
+    is_admin(auth.uid())
+);
+
+CREATE POLICY "Users can manage their own roles"
+ON user_roles FOR INSERT
+WITH CHECK (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
+);
+
+CREATE POLICY "Users can read their own investments"
+ON investments FOR SELECT
+USING (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
 );
 
 CREATE POLICY "Users can manage their own investments"
-ON investments 
-FOR ALL
-TO authenticated
+ON investments FOR INSERT
+WITH CHECK (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
+);
+
+CREATE POLICY "Users can update their own investments"
+ON investments FOR UPDATE
 USING (
     auth.uid() = user_id OR 
-    (SELECT is_admin(auth.uid()))
+    is_admin(auth.uid())
+)
+WITH CHECK (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
+);
+
+CREATE POLICY "Users can read their own documents"
+ON documents FOR SELECT
+USING (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
 );
 
 CREATE POLICY "Users can manage their own documents"
-ON documents 
-FOR ALL
-TO authenticated
+ON documents FOR INSERT
+WITH CHECK (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
+);
+
+CREATE POLICY "Users can update their own documents"
+ON documents FOR UPDATE
 USING (
     auth.uid() = user_id OR 
-    (SELECT is_admin(auth.uid()))
+    is_admin(auth.uid())
+)
+WITH CHECK (
+    auth.uid() = user_id OR 
+    is_admin(auth.uid())
 );
 
 -- Create trigger function for updated_at
