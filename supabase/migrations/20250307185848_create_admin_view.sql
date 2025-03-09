@@ -1,26 +1,55 @@
--- Create admin_users materialized view
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own roles" ON user_roles;
+DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
+
+-- Create the admin_users materialized view
 CREATE MATERIALIZED VIEW IF NOT EXISTS admin_users AS
-SELECT DISTINCT u.id as user_id
-FROM auth.users u
-JOIN user_roles ur ON u.id = ur.user_id
-JOIN roles r ON ur.role_id = r.id
+SELECT DISTINCT ur.user_id
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id
 WHERE r.name = 'admin';
 
--- Create function to refresh the materialized view
+-- Create unique index for concurrent refresh
+CREATE UNIQUE INDEX IF NOT EXISTS admin_users_user_id_idx ON admin_users (user_id);
+
+-- Create function to check if user is admin
+CREATE OR REPLACE FUNCTION is_admin(user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM admin_users WHERE user_id = $1
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create policies for user_roles
+CREATE POLICY "Users can view their own roles"
+ON user_roles
+FOR ALL
+USING (
+  auth.uid() = user_id
+);
+
+CREATE POLICY "Admins can view all roles"
+ON user_roles
+FOR ALL
+USING (
+  is_admin(auth.uid())
+);
+
+-- Create trigger to refresh admin_users view
 CREATE OR REPLACE FUNCTION refresh_admin_users()
 RETURNS trigger AS $$
 BEGIN
-    REFRESH MATERIALIZED VIEW admin_users;
-    RETURN NULL;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY admin_users;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger to refresh the view when user_roles changes
-DROP TRIGGER IF EXISTS refresh_admin_users_trigger ON user_roles;
 CREATE TRIGGER refresh_admin_users_trigger
-    AFTER INSERT OR UPDATE OR DELETE ON user_roles
-    FOR EACH STATEMENT
-    EXECUTE FUNCTION refresh_admin_users();
+AFTER INSERT OR UPDATE OR DELETE ON user_roles
+FOR EACH STATEMENT
+EXECUTE FUNCTION refresh_admin_users();
 
 -- Create investments table if it doesn't exist
 CREATE TABLE IF NOT EXISTS investments (
@@ -48,31 +77,52 @@ CREATE TABLE IF NOT EXISTS documents (
     updated_at timestamptz DEFAULT now()
 );
 
--- Enable RLS on new tables
+-- Enable RLS on all tables
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
--- Create policies for investments
+-- Grant necessary permissions
+GRANT SELECT ON admin_users TO authenticated;
+GRANT SELECT ON user_roles TO authenticated;
+GRANT SELECT ON investments TO authenticated;
+GRANT SELECT ON documents TO authenticated;
+
+-- Create policies for investments table
+DROP POLICY IF EXISTS "Users can view their own investments" ON investments;
+DROP POLICY IF EXISTS "Admins can view all investments" ON investments;
+
 CREATE POLICY "Users can view their own investments"
-    ON investments FOR SELECT
-    TO authenticated
-    USING (user_id = auth.uid());
+ON investments
+FOR ALL
+USING (
+  auth.uid() = user_id
+);
 
 CREATE POLICY "Admins can view all investments"
-    ON investments FOR SELECT
-    TO authenticated
-    USING (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()));
+ON investments
+FOR ALL
+USING (
+  is_admin(auth.uid())
+);
 
--- Create policies for documents
+-- Create policies for documents table
+DROP POLICY IF EXISTS "Users can view their own documents" ON documents;
+DROP POLICY IF EXISTS "Admins can view all documents" ON documents;
+
 CREATE POLICY "Users can view their own documents"
-    ON documents FOR SELECT
-    TO authenticated
-    USING (user_id = auth.uid());
+ON documents
+FOR ALL
+USING (
+  auth.uid() = user_id
+);
 
 CREATE POLICY "Admins can view all documents"
-    ON documents FOR SELECT
-    TO authenticated
-    USING (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()));
+ON documents
+FOR ALL
+USING (
+  is_admin(auth.uid())
+);
 
 -- Refresh the materialized view initially
 REFRESH MATERIALIZED VIEW admin_users; 
