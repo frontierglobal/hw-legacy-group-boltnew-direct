@@ -1,226 +1,178 @@
 import { logger } from './logger';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 interface MCPConfig {
-  servers: MCPServer[];
-  cursorAI: CursorAIConfig;
+    servers: {
+        [key: string]: {
+            host: string;
+            port: number;
+            protocol: 'http' | 'https';
+            timeout: number;
+            retries: number;
+            backoff: number;
+        };
+    };
+    defaultServer: string;
+    maxConnections: number;
+    connectionTimeout: number;
+    retryDelay: number;
+    maxRetries: number;
 }
 
-interface MCPServer {
-  name: string;
-  type: string;
-  url: string;
-  pool: PoolConfig;
-  ssl: SSLConfig;
-  retryOptions: RetryOptions;
-  logging: LoggingConfig;
-}
+// Default configuration that can be overridden by environment variables
+const defaultConfig: MCPConfig = {
+    servers: {
+        'default': {
+            host: import.meta.env.VITE_MCP_HOST || 'localhost',
+            port: parseInt(import.meta.env.VITE_MCP_PORT || '3000'),
+            protocol: (import.meta.env.VITE_MCP_PROTOCOL || 'http') as 'http' | 'https',
+            timeout: parseInt(import.meta.env.VITE_MCP_TIMEOUT || '5000'),
+            retries: parseInt(import.meta.env.VITE_MCP_RETRIES || '3'),
+            backoff: parseInt(import.meta.env.VITE_MCP_BACKOFF || '1000')
+        }
+    },
+    defaultServer: import.meta.env.VITE_MCP_DEFAULT_SERVER || 'default',
+    maxConnections: parseInt(import.meta.env.VITE_MCP_MAX_CONNECTIONS || '10'),
+    connectionTimeout: parseInt(import.meta.env.VITE_MCP_CONNECTION_TIMEOUT || '5000'),
+    retryDelay: parseInt(import.meta.env.VITE_MCP_RETRY_DELAY || '1000'),
+    maxRetries: parseInt(import.meta.env.VITE_MCP_MAX_RETRIES || '3')
+};
 
-interface PoolConfig {
-  max: number;
-  min: number;
-  idleTimeoutMillis: number;
-  connectionTimeoutMillis: number;
-}
+export class MCPManager {
+    private config: MCPConfig;
+    private connections: Map<string, WebSocket> = new Map();
+    private reconnectAttempts: Map<string, number> = new Map();
+    private messageHandlers: Map<string, Set<(data: any) => void>> = new Map();
 
-interface SSLConfig {
-  rejectUnauthorized: boolean;
-  ca: string | null;
-  key: string | null;
-  cert: string | null;
-}
-
-interface RetryOptions {
-  maxRetries: number;
-  initialRetryDelayMillis: number;
-  maxRetryDelayMillis: number;
-}
-
-interface LoggingConfig {
-  level: string;
-  queries: boolean;
-  slowQueryThresholdMillis: number;
-}
-
-interface CursorAIConfig {
-  enabled: boolean;
-  features: {
-    autoComplete: boolean;
-    syntaxHighlighting: boolean;
-    diagnostics: boolean;
-    codeActions: boolean;
-    inlineCompletions: boolean;
-  };
-  modelConfig: {
-    temperature: number;
-    maxTokens: number;
-    model: string;
-  };
-}
-
-class MCPManager {
-  private static instance: MCPManager;
-  private config: MCPConfig;
-  private connections: Map<string, any>;
-  private retryTimeouts: Map<string, NodeJS.Timeout>;
-
-  private constructor() {
-    this.connections = new Map();
-    this.retryTimeouts = new Map();
-    this.config = this.loadConfig();
-  }
-
-  static getInstance(): MCPManager {
-    if (!MCPManager.instance) {
-      MCPManager.instance = new MCPManager();
+    constructor(config: Partial<MCPConfig> = {}) {
+        this.config = { ...defaultConfig, ...config };
+        logger.info('MCP Manager initialized with config:', this.config);
     }
-    return MCPManager.instance;
-  }
 
-  private loadConfig(): MCPConfig {
-    try {
-      const configPath = join(process.cwd(), '.cursor', 'mcp.json');
-      const configContent = readFileSync(configPath, 'utf-8');
-      const config = JSON.parse(configContent);
-      logger.info('MCP configuration loaded successfully');
-      return config;
-    } catch (error) {
-      logger.error('Failed to load MCP configuration:', error as Error);
-      throw new Error('Failed to load MCP configuration');
+    async connect(serverName: string = this.config.defaultServer): Promise<void> {
+        const server = this.config.servers[serverName];
+        if (!server) {
+            throw new Error(`Server ${serverName} not found in configuration`);
+        }
+
+        if (this.connections.has(serverName)) {
+            logger.warn(`Already connected to server ${serverName}`);
+            return;
+        }
+
+        try {
+            const ws = new WebSocket(`${server.protocol}://${server.host}:${server.port}`);
+            
+            ws.onopen = () => {
+                logger.info(`Connected to MCP server ${serverName}`);
+                this.connections.set(serverName, ws);
+                this.reconnectAttempts.set(serverName, 0);
+            };
+
+            ws.onclose = () => {
+                logger.warn(`Connection to ${serverName} closed`);
+                this.handleDisconnect(serverName);
+            };
+
+            ws.onerror = (event: Event) => {
+                const error = new Error(`WebSocket error for ${serverName}`);
+                logger.error(error.message, error);
+                this.handleDisconnect(serverName);
+            };
+
+            ws.onmessage = (event: MessageEvent) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    this.handleMessage(serverName, message);
+                } catch (error) {
+                    logger.error(`Error parsing message from ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
+                }
+            };
+
+        } catch (error) {
+            logger.error(`Failed to connect to ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
     }
-  }
 
-  async connect(serverName: string): Promise<any> {
-    try {
-      const server = this.config.servers.find(s => s.name === serverName);
-      if (!server) {
-        throw new Error(`Server "${serverName}" not found in MCP configuration`);
-      }
-
-      if (this.connections.has(serverName)) {
-        return this.connections.get(serverName);
-      }
-
-      logger.info(`Establishing connection to ${serverName}...`);
-
-      // In a real implementation, this would create a database connection
-      // using the configuration settings
-      const connection = {
-        connected: true,
-        server: server.name,
-        pool: server.pool,
-        timestamp: new Date()
-      };
-
-      this.connections.set(serverName, connection);
-      logger.info(`Successfully connected to ${serverName}`);
-
-      return connection;
-    } catch (error) {
-      logger.error(`Failed to connect to ${serverName}:`, error as Error);
-      this.handleConnectionError(serverName, error as Error);
-      throw error;
+    private handleDisconnect(serverName: string): void {
+        this.connections.delete(serverName);
+        const attempts = this.reconnectAttempts.get(serverName) || 0;
+        
+        if (attempts < this.config.maxRetries) {
+            setTimeout(() => {
+                this.reconnectAttempts.set(serverName, attempts + 1);
+                this.connect(serverName).catch(error => {
+                    logger.error(`Failed to reconnect to ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
+                });
+            }, this.config.retryDelay * Math.pow(2, attempts));
+        } else {
+            logger.error(`Max reconnection attempts reached for ${serverName}`);
+        }
     }
-  }
 
-  private handleConnectionError(serverName: string, error: Error): void {
-    const server = this.config.servers.find(s => s.name === serverName);
-    if (!server) return;
+    private handleMessage(serverName: string, message: any): void {
+        const { type, data } = message;
+        const handlers = this.messageHandlers.get(type);
+        
+        if (handlers) {
+            handlers.forEach(handler => {
+                try {
+                    handler(data);
+                } catch (error) {
+                    logger.error(`Error in message handler for ${type}:`, error instanceof Error ? error : new Error(String(error)));
+                }
+            });
+        } else {
+            logger.warn(`No handlers registered for message type: ${type}`);
+        }
+    }
 
-    const retryCount = this.retryTimeouts.has(serverName) ? 1 : 0;
-    if (retryCount < server.retryOptions.maxRetries) {
-      const delay = Math.min(
-        server.retryOptions.initialRetryDelayMillis * Math.pow(2, retryCount),
-        server.retryOptions.maxRetryDelayMillis
-      );
+    on(type: string, handler: (data: any) => void): void {
+        if (!this.messageHandlers.has(type)) {
+            this.messageHandlers.set(type, new Set());
+        }
+        this.messageHandlers.get(type)!.add(handler);
+    }
 
-      logger.info(`Retrying connection to ${serverName} in ${delay}ms (attempt ${retryCount + 1}/${server.retryOptions.maxRetries})`);
+    off(type: string, handler: (data: any) => void): void {
+        const handlers = this.messageHandlers.get(type);
+        if (handlers) {
+            handlers.delete(handler);
+            if (handlers.size === 0) {
+                this.messageHandlers.delete(type);
+            }
+        }
+    }
 
-      const timeout = setTimeout(() => {
-        this.retryTimeouts.delete(serverName);
-        this.connect(serverName).catch(() => {
-          // Error handling is done in connect()
+    send(serverName: string, type: string, data: any): void {
+        const connection = this.connections.get(serverName);
+        if (!connection) {
+            throw new Error(`Not connected to server ${serverName}`);
+        }
+
+        try {
+            connection.send(JSON.stringify({ type, data }));
+        } catch (error) {
+            logger.error(`Failed to send message to ${serverName}:`, error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+
+    disconnect(serverName: string = this.config.defaultServer): void {
+        const connection = this.connections.get(serverName);
+        if (connection) {
+            connection.close();
+            this.connections.delete(serverName);
+            this.reconnectAttempts.delete(serverName);
+        }
+    }
+
+    disconnectAll(): void {
+        this.connections.forEach((connection, serverName) => {
+            this.disconnect(serverName);
         });
-      }, delay);
-
-      this.retryTimeouts.set(serverName, timeout);
     }
-  }
-
-  async disconnect(serverName: string): Promise<void> {
-    try {
-      const connection = this.connections.get(serverName);
-      if (!connection) return;
-
-      // In a real implementation, this would close the database connection
-      this.connections.delete(serverName);
-      
-      const timeout = this.retryTimeouts.get(serverName);
-      if (timeout) {
-        clearTimeout(timeout);
-        this.retryTimeouts.delete(serverName);
-      }
-
-      logger.info(`Disconnected from ${serverName}`);
-    } catch (error) {
-      logger.error(`Error disconnecting from ${serverName}:`, error as Error);
-      throw error;
-    }
-  }
-
-  async disconnectAll(): Promise<void> {
-    const serverNames = Array.from(this.connections.keys());
-    await Promise.all(serverNames.map(name => this.disconnect(name)));
-  }
-
-  getConnection(serverName: string): any | undefined {
-    return this.connections.get(serverName);
-  }
-
-  getCursorAIConfig(): CursorAIConfig {
-    return this.config.cursorAI;
-  }
-
-  getServerConfig(serverName: string): MCPServer | undefined {
-    return this.config.servers.find(s => s.name === serverName);
-  }
-
-  async listTables(serverName: string): Promise<string[]> {
-    try {
-      const connection = await this.connect(serverName);
-      if (!connection) {
-        throw new Error(`No connection available for server ${serverName}`);
-      }
-
-      // Query to get all tables in the public schema
-      const query = `
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-        AND table_type = 'BASE TABLE'
-        ORDER BY table_name;
-      `;
-
-      // In a real implementation, this would execute the query
-      // For now, we'll return a list of tables we know exist from our migrations
-      return [
-        'roles',
-        'user_roles',
-        'properties',
-        'businesses',
-        'investments',
-        'documents',
-        'transactions',
-        'audit_logs',
-        'pages',
-        'content'
-      ];
-    } catch (error) {
-      logger.error(`Error listing tables for ${serverName}:`, error as Error);
-      throw error;
-    }
-  }
 }
 
-export const mcpManager = MCPManager.getInstance(); 
+// Export a singleton instance
+export const mcpManager = new MCPManager(); 
