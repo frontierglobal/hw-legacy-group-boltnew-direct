@@ -1,55 +1,20 @@
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Users can view their own roles" ON user_roles;
-DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
-
--- Create the admin_users materialized view
-CREATE MATERIALIZED VIEW IF NOT EXISTS admin_users AS
-SELECT DISTINCT ur.user_id
-FROM user_roles ur
-JOIN roles r ON r.id = ur.role_id
-WHERE r.name = 'admin';
-
--- Create unique index for concurrent refresh
-CREATE UNIQUE INDEX IF NOT EXISTS admin_users_user_id_idx ON admin_users (user_id);
-
--- Create function to check if user is admin
-CREATE OR REPLACE FUNCTION is_admin(user_id uuid)
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM admin_users WHERE user_id = $1
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create policies for user_roles
-CREATE POLICY "Users can view their own roles"
-ON user_roles
-FOR ALL
-USING (
-  auth.uid() = user_id
+-- Create roles table if it doesn't exist
+CREATE TABLE IF NOT EXISTS roles (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL UNIQUE,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
 );
 
-CREATE POLICY "Admins can view all roles"
-ON user_roles
-FOR ALL
-USING (
-  is_admin(auth.uid())
+-- Create user_roles table if it doesn't exist
+CREATE TABLE IF NOT EXISTS user_roles (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+    role_id uuid REFERENCES roles(id) ON DELETE CASCADE,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(user_id, role_id)
 );
-
--- Create trigger to refresh admin_users view
-CREATE OR REPLACE FUNCTION refresh_admin_users()
-RETURNS trigger AS $$
-BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY admin_users;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER refresh_admin_users_trigger
-AFTER INSERT OR UPDATE OR DELETE ON user_roles
-FOR EACH STATEMENT
-EXECUTE FUNCTION refresh_admin_users();
 
 -- Create investments table if it doesn't exist
 CREATE TABLE IF NOT EXISTS investments (
@@ -77,52 +42,93 @@ CREATE TABLE IF NOT EXISTS documents (
     updated_at timestamptz DEFAULT now()
 );
 
--- Enable RLS on all tables
+-- Insert admin role if it doesn't exist
+INSERT INTO roles (name) 
+VALUES ('admin')
+ON CONFLICT (name) DO NOTHING;
+
+-- Drop existing policies and start fresh
+DROP POLICY IF EXISTS "Users can view their own roles" ON user_roles;
+DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
+DROP POLICY IF EXISTS "Users can view their own investments" ON investments;
+DROP POLICY IF EXISTS "Admins can view all investments" ON investments;
+DROP POLICY IF EXISTS "Users can view their own documents" ON documents;
+DROP POLICY IF EXISTS "Admins can view all documents" ON documents;
+
+-- Drop existing admin view and related objects
+DROP MATERIALIZED VIEW IF EXISTS admin_users CASCADE;
+DROP FUNCTION IF EXISTS is_admin CASCADE;
+DROP FUNCTION IF EXISTS refresh_admin_users CASCADE;
+
+-- Create base function to check admin status
+CREATE OR REPLACE FUNCTION is_admin(check_user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 
+        FROM user_roles ur 
+        JOIN roles r ON r.id = ur.role_id 
+        WHERE ur.user_id = check_user_id 
+        AND r.name = 'admin'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create admin_users view (not materialized for real-time accuracy)
+CREATE OR REPLACE VIEW admin_users AS
+SELECT DISTINCT ur.user_id
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id
+WHERE r.name = 'admin';
+
+-- Create basic RLS policies
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
+-- Roles policies
+CREATE POLICY "Anyone can read roles"
+ON roles FOR SELECT
+TO authenticated
+USING (true);
+
+-- User roles policies
+CREATE POLICY "Users can read their own roles"
+ON user_roles FOR SELECT
+TO authenticated
+USING (
+    user_id = auth.uid() OR 
+    is_admin(auth.uid())
+);
+
+-- Investments policies
+CREATE POLICY "Users can manage their own investments"
+ON investments FOR ALL
+TO authenticated
+USING (
+    user_id = auth.uid() OR 
+    is_admin(auth.uid())
+);
+
+-- Documents policies
+CREATE POLICY "Users can manage their own documents"
+ON documents FOR ALL
+TO authenticated
+USING (
+    user_id = auth.uid() OR 
+    is_admin(auth.uid())
+);
+
 -- Grant necessary permissions
-GRANT SELECT ON admin_users TO authenticated;
+GRANT SELECT ON roles TO authenticated;
 GRANT SELECT ON user_roles TO authenticated;
-GRANT SELECT ON investments TO authenticated;
-GRANT SELECT ON documents TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON investments TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON documents TO authenticated;
+GRANT SELECT ON admin_users TO authenticated;
 
--- Create policies for investments table
-DROP POLICY IF EXISTS "Users can view their own investments" ON investments;
-DROP POLICY IF EXISTS "Admins can view all investments" ON investments;
-
-CREATE POLICY "Users can view their own investments"
-ON investments
-FOR ALL
-USING (
-  auth.uid() = user_id
-);
-
-CREATE POLICY "Admins can view all investments"
-ON investments
-FOR ALL
-USING (
-  is_admin(auth.uid())
-);
-
--- Create policies for documents table
-DROP POLICY IF EXISTS "Users can view their own documents" ON documents;
-DROP POLICY IF EXISTS "Admins can view all documents" ON documents;
-
-CREATE POLICY "Users can view their own documents"
-ON documents
-FOR ALL
-USING (
-  auth.uid() = user_id
-);
-
-CREATE POLICY "Admins can view all documents"
-ON documents
-FOR ALL
-USING (
-  is_admin(auth.uid())
-);
-
--- Refresh the materialized view initially
-REFRESH MATERIALIZED VIEW admin_users; 
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_investments_user_id ON investments(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id); 
