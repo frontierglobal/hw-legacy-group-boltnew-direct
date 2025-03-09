@@ -17,6 +17,8 @@ BEGIN
     DROP POLICY IF EXISTS "Users can update their own documents" ON documents;
     DROP POLICY IF EXISTS "Users can delete their own documents" ON documents;
     DROP POLICY IF EXISTS "Anyone can read roles" ON roles;
+    DROP POLICY IF EXISTS "Users can read properties" ON properties;
+    DROP POLICY IF EXISTS "Users can read businesses" ON businesses;
     
     -- Drop views and functions after policies
     DROP VIEW IF EXISTS admin_users;
@@ -48,6 +50,30 @@ CREATE TABLE IF NOT EXISTS user_roles (
     UNIQUE(user_id, role_id)
 );
 
+-- Create properties table if it doesn't exist
+CREATE TABLE IF NOT EXISTS properties (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    title text NOT NULL,
+    description text,
+    address text NOT NULL,
+    price decimal NOT NULL,
+    status text NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'pending', 'sold')),
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Create businesses table if it doesn't exist
+CREATE TABLE IF NOT EXISTS businesses (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    description text,
+    industry text NOT NULL,
+    valuation decimal NOT NULL,
+    status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold')),
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
 -- Create investments table if it doesn't exist
 CREATE TABLE IF NOT EXISTS investments (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,7 +86,11 @@ CREATE TABLE IF NOT EXISTS investments (
     interest_rate decimal,
     status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
     created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
+    updated_at timestamptz DEFAULT now(),
+    CONSTRAINT valid_target_id CHECK (
+        (type = 'property' AND EXISTS (SELECT 1 FROM properties WHERE id = target_id)) OR
+        (type = 'business' AND EXISTS (SELECT 1 FROM businesses WHERE id = target_id))
+    )
 );
 
 -- Create documents table if it doesn't exist
@@ -120,18 +150,24 @@ WHERE r.name = 'admin';
 -- Enable RLS on all tables
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
 -- Create default policies to deny all access
 ALTER TABLE roles FORCE ROW LEVEL SECURITY;
 ALTER TABLE user_roles FORCE ROW LEVEL SECURITY;
+ALTER TABLE properties FORCE ROW LEVEL SECURITY;
+ALTER TABLE businesses FORCE ROW LEVEL SECURITY;
 ALTER TABLE investments FORCE ROW LEVEL SECURITY;
 ALTER TABLE documents FORCE ROW LEVEL SECURITY;
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON roles TO authenticated;
+GRANT SELECT ON properties TO authenticated;
+GRANT SELECT ON businesses TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON user_roles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON investments TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON documents TO authenticated;
@@ -141,6 +177,7 @@ GRANT SELECT ON admin_users TO authenticated;
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
 CREATE INDEX IF NOT EXISTS idx_investments_user_id ON investments(user_id);
+CREATE INDEX IF NOT EXISTS idx_investments_target_id ON investments(target_id);
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
 
 -- Create simplified policies
@@ -165,6 +202,16 @@ WITH CHECK (auth.uid() = user_id OR is_admin(auth.uid()));
 CREATE POLICY "Users can delete their own roles"
 ON user_roles FOR DELETE
 USING (auth.uid() = user_id OR is_admin(auth.uid()));
+
+-- Properties policies
+CREATE POLICY "Users can read properties"
+ON properties FOR SELECT
+USING (true);
+
+-- Business policies
+CREATE POLICY "Users can read businesses"
+ON businesses FOR SELECT
+USING (true);
 
 -- Investment policies
 CREATE POLICY "Users can read their own investments"
@@ -221,6 +268,16 @@ BEGIN
 
     CREATE TRIGGER update_user_roles_updated_at
         BEFORE UPDATE ON user_roles
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+    CREATE TRIGGER update_properties_updated_at
+        BEFORE UPDATE ON properties
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+    CREATE TRIGGER update_businesses_updated_at
+        BEFORE UPDATE ON businesses
         FOR EACH ROW
         EXECUTE FUNCTION update_updated_at_column();
 
