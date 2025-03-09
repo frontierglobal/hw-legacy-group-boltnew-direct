@@ -1,125 +1,110 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { logger } from '../lib/logger';
 
-interface User {
-  id: string;
-  email: string;
-  role: string;
-}
-
 interface AuthContextType {
-  user: User | null;
-  isAdmin: boolean;
-  isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
+    user: User | null;
+    isAdmin: boolean;
+    isLoading: boolean;
+    signIn: (email: string, password: string) => Promise<void>;
+    signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const [user, setUser] = useState<User | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [hasRedirected, setHasRedirected] = useState(false);
 
-  useEffect(() => {
-    logger.info('Setting up auth subscription...');
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      logger.info('Auth state changed:', { event, hasSession: !!session });
-      
-      if (session?.user) {
+    useEffect(() => {
+        // Check active sessions and sets the user
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+            if (session?.user) {
+                checkUserRole(session.user);
+            }
+            setIsLoading(false);
+        });
+
+        // Listen for changes on auth state (logged in, signed out, etc.)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            setUser(session?.user ?? null);
+            if (session?.user) {
+                await checkUserRole(session.user);
+            } else {
+                setIsAdmin(false);
+            }
+            setIsLoading(false);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const checkUserRole = async (user: User) => {
         try {
-          // Get user role from user_roles table
-          const { data: roleData, error: roleError } = await supabase
-            .from('user_roles')
-            .select('roles(name)')
-            .eq('user_id', session.user.id)
-            .single();
+            const { data, error } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', user.id)
+                .single();
 
-          if (roleError) {
-            logger.error('Error fetching user role:', roleError);
-            throw roleError;
-          }
+            if (error) throw error;
 
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            role: roleData?.roles?.name || 'user'
-          });
+            const isUserAdmin = data?.role === 'admin';
+            setIsAdmin(isUserAdmin);
+
+            // Handle redirection based on role
+            if (!hasRedirected) {
+                const path = window.location.pathname;
+                if (path === '/login' || path === '/register') {
+                    window.location.href = isUserAdmin ? '/admin' : '/dashboard';
+                    setHasRedirected(true);
+                }
+            }
         } catch (error) {
-          logger.error('Error setting user data:', error);
-          setUser(null);
+            logger.error('Error checking user role:', error instanceof Error ? error : new Error(String(error)));
+            setIsAdmin(false);
         }
-      } else {
-        setUser(null);
-      }
-      
-      setIsLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
     };
-  }, []);
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      logger.info('Attempting sign in...', { email });
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) {
-        logger.error('Sign in error:', error);
-        throw error;
-      }
+    const signIn = async (email: string, password: string) => {
+        try {
+            const { error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) throw error;
+        } catch (error) {
+            logger.error('Error signing in:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    };
 
-      logger.info('Sign in successful');
-      navigate('/dashboard');
-    } catch (error) {
-      logger.error('Sign in failed:', error);
-      throw error;
+    const signOut = async () => {
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+            setHasRedirected(false);
+        } catch (error) {
+            logger.error('Error signing out:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, isAdmin, isLoading, signIn, signOut }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export function useAuth() {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
     }
-  };
-
-  const signOut = async () => {
-    try {
-      logger.info('Attempting sign out...');
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        logger.error('Sign out error:', error);
-        throw error;
-      }
-
-      logger.info('Sign out successful');
-      navigate('/');
-    } catch (error) {
-      logger.error('Sign out failed:', error);
-      throw error;
-    }
-  };
-
-  const value = {
-    user,
-    isAdmin: user?.role === 'admin',
-    isLoading,
-    signIn,
-    signOut
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}; 
+    return context;
+} 

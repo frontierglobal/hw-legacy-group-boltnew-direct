@@ -216,3 +216,24 @@ export const cleanup = async () => {
     }
   }
 };
+
+// Add logging for database operations
+supabase.from = new Proxy(supabase.from, {
+  get(target, prop) {
+    const original = target[prop as keyof typeof target];
+    if (typeof original === 'function') {
+      return async (...args: any[]) => {
+        try {
+          logger.debug(`Supabase query: ${prop.toString()}`, args);
+          const result = await original.apply(target, args);
+          logger.debug(`Supabase result: ${prop.toString()}`, result);
+          return result;
+        } catch (error) {
+          logger.error(`Supabase error: ${prop.toString()}`, error instanceof Error ? error : new Error(String(error)));
+          throw error;
+        }
+      };
+    }
+    return original;
+  }
+});
