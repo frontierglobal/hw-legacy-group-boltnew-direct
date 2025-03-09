@@ -33,6 +33,7 @@ import AuthCallback from './pages/AuthCallback';
 import { logger } from './lib/logger';
 import AdminPage from './pages/Admin';
 import Page from './pages/Page';
+import { mcpManager } from './lib/mcp';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +81,23 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function App() {
+  useEffect(() => {
+    const initializeMCP = async () => {
+      try {
+        await mcpManager.initialize('supabase');
+        logger.info('MCP connection established successfully');
+      } catch (error) {
+        logger.error('Failed to establish MCP connection:', error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    initializeMCP();
+
+    return () => {
+      mcpManager.disconnectAll();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>

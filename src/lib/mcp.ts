@@ -38,14 +38,39 @@ const defaultConfig: MCPConfig = {
 };
 
 export class MCPManager {
+    private static instance: MCPManager;
     private config: MCPConfig;
     private connections: Map<string, WebSocket> = new Map();
     private reconnectAttempts: Map<string, number> = new Map();
     private messageHandlers: Map<string, Set<(data: any) => void>> = new Map();
+    private initialized: boolean = false;
 
-    constructor(config: Partial<MCPConfig> = {}) {
+    private constructor(config: Partial<MCPConfig> = {}) {
         this.config = { ...defaultConfig, ...config };
         logger.info('MCP Manager initialized with config:', this.config);
+    }
+
+    static getInstance(): MCPManager {
+        if (!MCPManager.instance) {
+            MCPManager.instance = new MCPManager();
+        }
+        return MCPManager.instance;
+    }
+
+    async initialize(serverName: string = this.config.defaultServer): Promise<void> {
+        if (this.initialized) {
+            logger.warn('MCP Manager already initialized');
+            return;
+        }
+
+        try {
+            await this.connect(serverName);
+            this.initialized = true;
+            logger.info('MCP Manager initialized successfully');
+        } catch (error) {
+            logger.error('Failed to initialize MCP Manager:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
     }
 
     async connect(serverName: string = this.config.defaultServer): Promise<void> {
@@ -172,7 +197,11 @@ export class MCPManager {
             this.disconnect(serverName);
         });
     }
+
+    isInitialized(): boolean {
+        return this.initialized;
+    }
 }
 
 // Export a singleton instance
-export const mcpManager = new MCPManager(); 
+export const mcpManager = MCPManager.getInstance(); 
