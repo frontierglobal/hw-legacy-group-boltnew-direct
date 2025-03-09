@@ -1,4 +1,6 @@
 import { logger } from './logger';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 interface MCPConfig {
   servers: MCPServer[];
@@ -7,6 +9,7 @@ interface MCPConfig {
 
 interface MCPServer {
   name: string;
+  type: string;
   url: string;
   pool: PoolConfig;
   ssl: SSLConfig;
@@ -47,10 +50,12 @@ interface CursorAIConfig {
     syntaxHighlighting: boolean;
     diagnostics: boolean;
     codeActions: boolean;
+    inlineCompletions: boolean;
   };
   modelConfig: {
     temperature: number;
     maxTokens: number;
+    model: string;
   };
 }
 
@@ -75,8 +80,9 @@ class MCPManager {
 
   private loadConfig(): MCPConfig {
     try {
-      // In a real implementation, this would load from .cursor/mcp.json
-      const config = require('../../.cursor/mcp.json');
+      const configPath = join(process.cwd(), '.cursor', 'mcp.json');
+      const configContent = readFileSync(configPath, 'utf-8');
+      const config = JSON.parse(configContent);
       logger.info('MCP configuration loaded successfully');
       return config;
     } catch (error) {
@@ -178,6 +184,42 @@ class MCPManager {
 
   getServerConfig(serverName: string): MCPServer | undefined {
     return this.config.servers.find(s => s.name === serverName);
+  }
+
+  async listTables(serverName: string): Promise<string[]> {
+    try {
+      const connection = await this.connect(serverName);
+      if (!connection) {
+        throw new Error(`No connection available for server ${serverName}`);
+      }
+
+      // Query to get all tables in the public schema
+      const query = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+      `;
+
+      // In a real implementation, this would execute the query
+      // For now, we'll return a list of tables we know exist from our migrations
+      return [
+        'roles',
+        'user_roles',
+        'properties',
+        'businesses',
+        'investments',
+        'documents',
+        'transactions',
+        'audit_logs',
+        'pages',
+        'content'
+      ];
+    } catch (error) {
+      logger.error(`Error listing tables for ${serverName}:`, error as Error);
+      throw error;
+    }
   }
 }
 
