@@ -5,15 +5,17 @@ SET search_path TO public, auth;
 DO $$ 
 BEGIN
     -- Drop policies if they exist
-    DROP POLICY IF EXISTS "Users can view their own roles" ON user_roles;
-    DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
-    DROP POLICY IF EXISTS "Users can view their own investments" ON investments;
-    DROP POLICY IF EXISTS "Admins can view all investments" ON investments;
-    DROP POLICY IF EXISTS "Users can view their own documents" ON documents;
-    DROP POLICY IF EXISTS "Admins can view all documents" ON documents;
+    DROP POLICY IF EXISTS "Users can read their own roles" ON user_roles;
+    DROP POLICY IF EXISTS "Users can manage their own roles" ON user_roles;
+    DROP POLICY IF EXISTS "Users can read their own investments" ON investments;
+    DROP POLICY IF EXISTS "Users can manage their own investments" ON investments;
+    DROP POLICY IF EXISTS "Users can update their own investments" ON investments;
+    DROP POLICY IF EXISTS "Users can read their own documents" ON documents;
+    DROP POLICY IF EXISTS "Users can manage their own documents" ON documents;
+    DROP POLICY IF EXISTS "Users can update their own documents" ON documents;
     DROP POLICY IF EXISTS "Anyone can read roles" ON roles;
     
-    -- Drop views and functions
+    -- Drop views and functions after policies
     DROP VIEW IF EXISTS admin_users;
     DROP FUNCTION IF EXISTS is_admin(uuid);
     DROP FUNCTION IF EXISTS refresh_admin_users();
