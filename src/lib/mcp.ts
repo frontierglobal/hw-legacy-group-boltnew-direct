@@ -12,6 +12,7 @@ interface MCPConfig {
 class MCPManager {
     private config: MCPConfig;
     private connections: Map<string, any> = new Map();
+    private initialized: boolean = false;
 
     constructor() {
         // Load config from .cursor/mcp.json
@@ -29,6 +30,26 @@ class MCPManager {
         };
     }
 
+    async initialize(serverName?: string): Promise<void> {
+        if (this.initialized) {
+            logger.warn('MCP Manager already initialized');
+            return;
+        }
+
+        try {
+            if (serverName) {
+                await this.connect(serverName);
+            } else {
+                await Promise.all(this.config.servers.map(server => this.connect(server.name)));
+            }
+            this.initialized = true;
+            logger.info('MCP Manager initialized successfully');
+        } catch (error) {
+            logger.error('Failed to initialize MCP Manager:', error as Error);
+            throw error;
+        }
+    }
+
     async connect(serverName: string): Promise<any> {
         try {
             const server = this.config.servers.find(s => s.name === serverName);
@@ -36,10 +57,12 @@ class MCPManager {
                 throw new Error(`Server ${serverName} not found in configuration`);
             }
 
-            // For now, we'll just log the connection attempt
+            if (this.connections.has(serverName)) {
+                return this.connections.get(serverName);
+            }
+
             logger.info(`Attempting to connect to ${serverName} at ${server.url}`);
             
-            // In a real implementation, we would establish the connection here
             // For now, we'll return a mock connection
             const connection = {
                 pool: {},
@@ -68,10 +91,15 @@ class MCPManager {
         for (const [serverName] of this.connections) {
             await this.disconnect(serverName);
         }
+        this.initialized = false;
     }
 
     getServerConfig(serverName: string): ServerConfig | undefined {
         return this.config.servers.find(s => s.name === serverName);
+    }
+
+    isInitialized(): boolean {
+        return this.initialized;
     }
 }
 
