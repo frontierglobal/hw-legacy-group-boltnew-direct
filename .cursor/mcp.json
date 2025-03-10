@@ -12,15 +12,12 @@
       {
         "name": "sequential-thinking",
         "type": "command",
-        "command": "npx -y @modelcontextprotocol/server-sequential-thinking",
+        "command": "node",
+        "args": ["./node_modules/@modelcontextprotocol/server-sequential-thinking/dist/index.js"],
         "options": {
           "stdio": "pipe",
-          "shell": true,
-          "env": {
-            "NODE_ENV": "production"
-          }
-        },
-        "autostart": true
+          "cwd": "${workspaceRoot}"
+        }
       }
     ],
     "cursorAI": {
