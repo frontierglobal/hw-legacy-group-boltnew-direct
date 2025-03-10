@@ -19,18 +19,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const [hasRedirected, setHasRedirected] = useState(false);
 
-    useEffect(() => {
-        // Check active sessions and sets the user
-        supabase.auth.getSession().then(({ data: { session } }) => {
+    // Initialize Supabase auth session
+    const initializeAuth = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
             setUser(session?.user ?? null);
             if (session?.user) {
-                checkUserRole(session.user);
+                await checkUserRole(session.user);
             }
             setIsLoading(false);
-        });
+        } catch (error) {
+            logger.error('Error initializing auth:', error instanceof Error ? error : new Error(String(error)));
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        // Initialize auth when component mounts
+        initializeAuth();
 
         // Listen for changes on auth state (logged in, signed out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            logger.info('Auth state changed:', { event });
             setUser(session?.user ?? null);
             if (session?.user) {
                 await checkUserRole(session.user);
@@ -60,6 +70,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!hasRedirected) {
                 const path = window.location.pathname;
                 if (path === '/login' || path === '/register') {
+                    logger.info('Redirecting after login:', { 
+                        isAdmin: isUserAdmin, 
+                        redirectTo: isUserAdmin ? '/admin' : '/dashboard' 
+                    });
                     window.location.href = isUserAdmin ? '/admin' : '/dashboard';
                     setHasRedirected(true);
                 }
@@ -107,4 +121,4 @@ export function useAuth() {
         throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
-} 
+}

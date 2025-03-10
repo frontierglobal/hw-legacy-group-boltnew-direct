@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logger } from '../lib/logger';
@@ -8,8 +8,16 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { signIn, isAdmin } = useAuth();
+    const { signIn, isAdmin, user } = useAuth();
     const navigate = useNavigate();
+
+    // Redirect if already logged in
+    useEffect(() => {
+        if (user) {
+            logger.info('User already logged in, redirecting to appropriate page');
+            navigate(isAdmin ? '/admin' : '/dashboard', { replace: true });
+        }
+    }, [user, isAdmin, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -104,4 +112,4 @@ export default function Login() {
             </div>
         </div>
     );
-} 
+}

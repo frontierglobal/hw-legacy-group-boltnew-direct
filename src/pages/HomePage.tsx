@@ -29,32 +29,27 @@ const HomePage: React.FC = () => {
       setError(null);
 
       try {
+        // Fetch all content in a single query
         const { data, error: fetchError } = await supabase
           .from('content')
           .select('*');
 
         if (fetchError) throw fetchError;
 
+        // Create a map of content key/value pairs
         const contentMap = (data || []).reduce((acc, item) => ({
           ...acc,
           [item.key]: item.value
         }), {} as ContentData);
 
         setContent(contentMap);
-
-        const { data: titleData, error: titleError } = await supabase
-          .from('content')
-          .select('value')
-          .eq('key', 'home_title')
-          .single();
-
-        if (titleError) {
-          logger.error('Error fetching home title:', titleError);
-          return;
-        }
-
-        if (titleData?.value) {
-          setTitle(titleData.value);
+        
+        // Set the title from the content map or use default
+        if (contentMap.home_title) {
+          setTitle(contentMap.home_title);
+          logger.info('Home title set from content:', { title: contentMap.home_title });
+        } else {
+          logger.info('Using default home title');
         }
       } catch (err) {
         const error = err as Error;
