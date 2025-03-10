@@ -1,5 +1,15 @@
 -- Clean setup migration
 -- Create tables if they don't exist
+CREATE TABLE IF NOT EXISTS content (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    type TEXT NOT NULL,
+    published BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS properties (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
@@ -52,20 +62,41 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 -- Enable RLS
+ALTER TABLE content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
--- Create admin_users view
+-- Create admin_users view with a simpler check
 CREATE OR REPLACE VIEW admin_users AS
 SELECT id as user_id
 FROM auth.users
-WHERE role = 'admin';
+WHERE raw_user_meta_data->>'role' = 'admin';
 
 -- Create policies with proper error handling
 DO $$
 BEGIN
+    -- Content policies
+    DROP POLICY IF EXISTS "Anyone can read published content" ON content;
+    CREATE POLICY "Anyone can read published content"
+    ON content
+    FOR SELECT
+    TO public
+    USING (published = true);
+
+    DROP POLICY IF EXISTS "Admins can manage content" ON content;
+    CREATE POLICY "Admins can manage content"
+    ON content
+    FOR ALL
+    TO authenticated
+    USING (
+        EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+    )
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+    );
+
     -- Properties policies
     DROP POLICY IF EXISTS "Admins can manage properties" ON properties;
     CREATE POLICY "Admins can manage properties"
